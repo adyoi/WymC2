@@ -4,9 +4,6 @@
       .bg   { fill: #0a0f0c; stroke: #1a2e1f; stroke-width: 2px; }
       .hex  { fill: #0d1a12; stroke: #00ff41; stroke-width: 3px; }
       .acc  { fill: #00ff41; }
-      .lnk  { stroke: #00ff41; stroke-width: 2px; stroke-dasharray: 6 5; opacity: .85; }
-      .node { fill: #0a0f0c; stroke: #00ff41; stroke-width: 2.5px; }
-      .core { fill: #0a0f0c; }
       .t1   { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-weight: bold; fill: #00ff41; }
       .t2   { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-weight: bold; fill: #e6ffe9; }
       .tag  { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; fill: #7a9a82; letter-spacing: 4px; }
@@ -23,23 +20,14 @@
   <!-- hexagon grid frame -->
   <polygon class="hex" points="170,60 263,118 263,234 170,292 77,234 77,118"/>
 
-  <!-- link lines: server -> agents -->
-  <line class="lnk" x1="146" y1="140" x2="196" y2="182"/>
-  <line class="lnk" x1="152" y1="196" x2="180" y2="218"/>
+  <!-- terminal prompt symbol: chevron + block cursor -->
+  <path d="M 149 136 L 175 166 L 149 196" fill="none" stroke="#00ff41" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="194" y="132" width="23" height="68" rx="4" fill="#00ff41"/>
 
-  <!-- server node -->
-  <circle class="acc" cx="140" cy="128" r="24"/>
-  <circle class="core" cx="140" cy="128" r="9"/>
-  <path d="M138 34h4v6h-4z" fill="#3f6a52"/>
+  <!-- ambient grid dots -->
   <circle cx="198" cy="40" r="3" class="dot"/>
   <circle cx="236" cy="66" r="3" class="dot"/>
   <circle cx="122" cy="300" r="3" class="dot"/>
-
-  <!-- agent nodes -->
-  <circle class="node" cx="196" cy="182" r="15"/>
-  <circle class="node" cx="180" cy="220" r="11"/>
-  <circle class="acc" cx="196" cy="182" r="4"/>
-  <circle class="acc" cx="180" cy="220" r="3"/>
 
   <!-- wordmark (single line, two-tone) -->
   <text class="t1" x="330" y="150" font-size="88">WYM</text>
