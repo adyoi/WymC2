@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-label="Wym C2 logo">
+  <defs>
+    <style>
+      .bg   { fill: #0a0f0c; stroke: #1a2e1f; stroke-width: 2px; }
+      .hex  { fill: #0d1a12; stroke: #00ff41; stroke-width: 3px; }
+      .acc  { fill: #00ff41; }
+      .lnk  { stroke: #00ff41; stroke-width: 2px; stroke-dasharray: 6 5; opacity: .85; }
+      .node { fill: #0a0f0c; stroke: #00ff41; stroke-width: 2.5px; }
+      .core { fill: #0a0f0c; }
+      .t1   { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-weight: bold; fill: #00ff41; }
+      .t2   { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-weight: bold; fill: #e6ffe9; }
+      .tag  { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; fill: #7a9a82; letter-spacing: 4px; }
+      .dot  { fill: #3f6a52; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="8" y="8" width="1184" height="304" rx="36"/>
+  <rect x="8" y="8" width="1184" height="304" rx="36" fill="url(#mesh)" opacity="0.05"/>
+  <defs>
+    <pattern id="mesh" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#00ff41" opacity="0.22"/>
+    </pattern>
+  </defs>
+
+  <!-- hexagon grid frame -->
+  <polygon class="hex" points="170,60 263,118 263,234 170,292 77,234 77,118"/>
+
+  <!-- link lines: server -> agents -->
+  <line class="lnk" x1="146" y1="140" x2="196" y2="182"/>
+  <line class="lnk" x1="152" y1="196" x2="180" y2="218"/>
+
+  <!-- server node -->
+  <circle class="acc" cx="140" cy="128" r="24"/>
+  <circle class="core" cx="140" cy="128" r="9"/>
+  <path d="M138 34h4v6h-4z" fill="#3f6a52"/>
+  <circle cx="198" cy="40" r="3" class="dot"/>
+  <circle cx="236" cy="66" r="3" class="dot"/>
+  <circle cx="122" cy="300" r="3" class="dot"/>
+
+  <!-- agent nodes -->
+  <circle class="node" cx="196" cy="182" r="15"/>
+  <circle class="node" cx="180" cy="220" r="11"/>
+  <circle class="acc" cx="196" cy="182" r="4"/>
+  <circle class="acc" cx="180" cy="220" r="3"/>
+
+  <!-- wordmark -->
+  <text class="t1" x="330" y="150" font-size="88">WYM</text>
+  <text class="t2" x="330" y="236" font-size="88">C2</text>
+  <rect x="322" y="132" width="352" height="120" rx="8" fill="#0d1a12" opacity="0.55"/>
+
+  <!-- tagline -->
+  <text class="tag" x="334" y="264" font-size="20">COMMAND &amp; CONTROL FRAMEWORK</text>
+  <text class="tag" x="334" y="292" font-size="15" letter-spacing="2px">14 CLIENT LANGUAGES  ·  HTTP/JSON  ·  WIN/LINUX/macOS</text>
+</svg>

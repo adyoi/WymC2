@@ -1,5 +1,7 @@
 # Wym C2
 
+<p align="center"><img src="assets/logo.svg" alt="Wym C2" width="720"></p>
+
 Wym C2 are What you missed is Command and Control Frameworks:
 
 - **Server** — FastAPI + Jinja2 dashboard + SQLite (no external DB server needed)
@@ -52,6 +54,47 @@ multiplayer client-server loops, remote sensor fleets and similar systems:
 
 Swap the protocol and the payloads, keep the lifecycle: you have understood
 the core of any client-server control plane.
+
+---
+
+## How it works
+
+<p align="center"><img src="assets/process.svg" alt="Agent-server lifecycle" width="860"></p>
+
+1. **Register** — the agent posts its identity (`hostname`, `username`, `os`,
+   `arch`, `pid`, `ip`, `type`, `version`) and keeps the returned `agent_id`.
+2. **Check in** — every `interval ± jitter` seconds it asks the server for
+   tasks; a `404` means the server forgot it, so it **re-registers**.
+3. **Execute & report** — each task is run and its `{task_id, output,
+   exit_code}` is posted back. Unacknowledged tasks are re-sent by the server
+   after `C2_RETRY_AFTER`, so task handlers must be idempotent.
+4. **Manage** — operators queue tasks from the dashboard (shell, download,
+   upload, keylog, clipboard, screenshot, steal, clone, lateral, sleep, exit)
+   and watch agents go `alive → stale → dead`.
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/dashboard.png" alt="Dashboard" width="720">
+  <br><em>Dashboard — live metrics (alive / stale / dead) and per-agent tiles</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/agents.png" alt="Agent detail" width="720">
+  <br><em>Agent page — one-liner, notes, task history with output</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/generate.png" alt="Generate Agent" width="720">
+  <br><em>Generate Agent — ready-to-run installer for any of the 14 languages</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/login.png" alt="Login page" width="560">
+  <br><em>Dashboard login (PBKDF2 + server-side sessions)</em>
+</p>
 
 ---
 
@@ -218,6 +261,48 @@ python main.py
 
 Open `http://127.0.0.1:8000/login` and sign in (port 8001 when started via
 `install.sh` on Unix).
+
+---
+
+## Dependencies
+
+### Server
+
+- **Python 3.9+** plus the packages in [`requirements.txt`](requirements.txt)
+  (`fastapi`, `uvicorn[standard]`, `jinja2`, `python-multipart`, `pydantic`,
+  `psutil`, `pywinpty` on Windows, `pycryptodome`). The installers create the
+  virtualenv for you; nothing else is needed to serve the dashboard + agent API.
+- **Build toolchains** — only for compiling on the server (Generate Agent →
+  "build on server") or local builds: `go`, `cargo`, `gcc`/`g++` + libcurl
+  headers, the .NET SDK, and a JDK (11+). Installers probe for what is present
+  and skip the rest.
+
+### Agents
+
+| Agent        | Runtime / toolchain                     | Notes                                 |
+| ------------ | --------------------------------------- | ------------------------------------- |
+| `agent.py`   | Python 3.9+ + `requests`                | `pynput` optional → enables `keylog`  |
+| `agent.js`   | Node.js (stdlib only)                   | —                                     |
+| `agent.sh`   | Bash + `curl` + `jq`                    | falls back to `python3` for JSON      |
+| `agent.ps1`  | Windows PowerShell 5.1+ / `pwsh`        | AMSI may flag it; exclude its dir while testing |
+| `agent.php`  | PHP CLI                                 | cURL ext preferred, falls back to streams |
+| `agent.rb`   | Ruby (stdlib only)                      | —                                     |
+| `agent.pl`   | Perl (core `HTTP::Tiny` + `JSON::PP`)   | —                                     |
+| `agent.lua`  | Lua 5.x + `luasocket`                   | `luarocks install luasocket`          |
+| `agent.go`   | Go toolchain (compile)                  | —                                     |
+| `agent.rs`   | Cargo / Rust toolchain (compile)        | —                                     |
+| `agent.c` / `agent.cpp` | `gcc`/`g++` + libcurl (compile) | —                                     |
+| `agent.cs`   | .NET SDK 6+ (compile)                   | —                                     |
+| `agent.java` | JDK 11+ (compile; stdlib only)          | builds a cross-platform JAR           |
+
+Optional runtime helpers used by specific tasks:
+
+- **Clipboard / screenshot / keylog on Linux** — `xclip` → `wl-paste` → `xsel`;
+  `import` / `scrot` / `gnome-screenshot`; `xinput` / `/dev/input` (or `pynput`).
+- **`lateral`** — Windows: built-in `net use` + `schtasks`; Unix: `arp`/`ip
+  neigh` + `sshpass` + `scp`.
+- **Service install** — `agent-service.ps1` / `agent-service.sh` re-invoke the
+  same agent, so no extra runtime is needed.
 
 ---
 
