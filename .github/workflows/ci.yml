@@ -84,4 +84,4 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - name: C# (.NET)
-        run: dotnet build clients/agent.csproj -c Release -q --disable-build-servers
+        run: dotnet build clients/agent.csproj -c Release --no-incremental
