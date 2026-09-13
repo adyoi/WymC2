@@ -1,83 +1,130 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 880" role="img" aria-label="Agent to server lifecycle diagram">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1040" role="img" aria-label="Wym C2 agent lifecycle and lateral movement sequence diagram">
   <defs>
     <style>
-      .bg     { fill: #0a0f0c; }
-      .lhead  { fill: #101a14; stroke-width: 1.5px; }
-      .lser   { fill: #101a14; stroke: #00ff41; stroke-width: 1.5px; }
-      .op     { stroke: #2a4a38; stroke-width: 1.5px; stroke-dasharray: 4 4; }
-      .sg     { stroke: #00ff41; stroke-width: 1px; fill: none; }
-      .sga    { stroke: #4ede7c; stroke-width: 1px; fill: none; }
-      .sd     { stroke: #3f6a52; stroke-width: 2px; stroke-dasharray: 6 4; fill: none; }
-      .box    { fill: #101a14; stroke: #4ede7c; stroke-width: 1.5px; }
-      .tB     { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-weight: bold; }
-      .tM     { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; }
-      .tW     { fill: #e6ffe9; }
-      .tD     { fill: #7a9a82; }
-      .tS     { fill: #3f6a52; }
+      .sd { stroke: #5b7a66; fill: none; stroke-width: 1px; stroke-dasharray: 6 5; }
+      .sg { stroke: #00ff41; fill: none; stroke-width: 1px; }
+      .sga{ stroke: #00ff41; fill: none; stroke-width: 1px; }
+      .sgl{ stroke: #1a2e1f; fill: none; stroke-width: 1px; }
+      .box{ fill: #0d1a12; stroke: #1a2e1f; stroke-width: 1px; rx: 10px; }
+      .lane{ fill: #0a0f0c; stroke: #1a2e1f; stroke-width: 1px; }
+      .hd { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 17px; font-weight: bold; fill: #00ff41; text-anchor: middle; }
+      .tM { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 13px; fill: #00ff41; text-anchor: middle; }
+      .tW { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 13px; fill: #e6ffe9; text-anchor: middle; }
+      .tD { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 13px; fill: #9fb8a6; text-anchor: middle; }
+      .tS { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 11px; fill: #7a9a82; text-anchor: middle; }
+      .t1 { fill: #7a9a82; font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 15px; letter-spacing: 3px; }
+      .sec{ fill: #3f6a52; font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 13px; letter-spacing: 4px; }
+      .bd { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 11px; font-weight: bold; fill: #00ff41; text-anchor: middle; }
+      .bb { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-size: 10px; fill: #7a9a82; text-anchor: middle; }
+      .pill { fill: #0a0f0c; stroke: #1a2e1f; stroke-width: 1px; rx: 5px; }
     </style>
-    <marker id="ag" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#00ff41"/></marker>
-    <marker id="ad" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#3f6a52"/></marker>
+    <marker id="ag" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#00ff41"/>
+    </marker>
+    <marker id="ad" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#5b7a66"/>
+    </marker>
   </defs>
 
-  <rect class="bg" x="0" y="0" width="1200" height="880"/>
-  <text class="tM tS" x="30" y="40" font-size="15" letter-spacing="3px">AGENT &#8596; SERVER LIFECYCLE</text>
-
-  <!-- lifelines -->
-  <line class="op" x1="210" y1="130" x2="210" y2="820"/>
-  <line class="sg"  x1="560" y1="130" x2="560" y2="820"/>
-  <line class="sga" x1="930" y1="130" x2="930" y2="820"/>
+  <text x="30" y="30" class="t1">AGENT &#8596; SERVER LIFECYCLE &#183; LATERAL MOVEMENT</text>
 
   <!-- lane headers -->
-  <rect class="lhead" x="135" y="54" width="150" height="52" rx="10" stroke="#3f6a52"/>
-  <text class="tB tD" x="210" y="87" font-size="16" text-anchor="middle">OPERATOR</text>
-  <rect class="lser"  x="480" y="54" width="160" height="52" rx="10"/>
-  <text class="tB" x="560" y="87" font-size="16" text-anchor="middle" fill="#00ff41">C2 SERVER</text>
-  <rect class="lhead" x="855" y="54" width="150" height="52" rx="10" stroke="#4ede7c"/>
-  <text class="tB" x="930" y="87" font-size="16" text-anchor="middle" fill="#4ede7c">AGENT</text>
+  <rect class="lane" x="125" y="54" width="150" height="50"/>
+  <rect class="lane" x="460" y="54" width="120" height="50"/>
+  <rect class="lane" x="750" y="54" width="120" height="50"/>
+  <rect class="lane" x="1010" y="54" width="120" height="50"/>
+  <text class="hd" x="200" y="86">OPERATOR</text>
+  <text class="hd" x="520" y="86">C2 SERVER</text>
+  <text class="hd" x="810" y="86">AGENT</text>
+  <text class="hd" x="1070" y="86">PEER AGENT</text>
 
-  <!-- 1. register -->
-  <line class="sg" x1="930" y1="160" x2="566" y2="160" marker-end="url(#ag)"/>
-  <text class="tM tW" x="747" y="190" font-size="13" text-anchor="middle">POST /api/register {hostname, username, os, arch, pid, ip, type, version}</text>
-  <line class="sd" x1="560" y1="210" x2="924" y2="210" marker-end="url(#ad)"/>
-  <text class="tM tD" x="747" y="231" font-size="13" text-anchor="middle">200 {agent_id} &#160;&#183;&#160; persist id in ~/.c2agent.json</text>
+  <!-- lifelines -->
+  <line class="sgl" x1="200" y1="118" x2="200" y2="975"/>
+  <line class="sgl" x1="520" y1="118" x2="520" y2="975"/>
+  <line class="sgl" x1="810" y1="118" x2="810" y2="975"/>
+  <line class="sgl" x1="1070" y1="118" x2="1070" y2="975"/>
 
-  <!-- 2. operator creates a task -->
-  <line class="sd" x1="210" y1="278" x2="554" y2="278" marker-end="url(#ad)"/>
-  <text class="tM tD" x="383" y="264" font-size="13" text-anchor="middle">create task: type + args (SQLite queue)</text>
+  <!-- 1 register (solid request) -->
+  <line class="sg" x1="810" y1="160" x2="524" y2="160" marker-end="url(#ag)"/>
+  <rect class="pill" x="361" y="175" width="613" height="20"/>
+  <text class="tW" x="667" y="190">POST /api/register {hostname, username, os, arch, pid, ip, type, version}</text>
 
-  <!-- 3. checkin loop -->
-  <line class="sg" x1="930" y1="340" x2="566" y2="340" marker-end="url(#ag)"/>
-  <text class="tM tW" x="747" y="326" font-size="13" text-anchor="middle">POST /api/checkin {agent_id}</text>
-  <line class="sd" x1="560" y1="372" x2="924" y2="372" marker-end="url(#ad)"/>
-  <text class="tM tD" x="747" y="392" font-size="13" text-anchor="middle">200 {tasks: [...]} &#160;&#183;&#160; 404 unknown &#8594; re-register</text>
+  <!-- 2 register reply (sd) -->
+  <line class="sd" x1="520" y1="200" x2="806" y2="200" marker-end="url(#ad)"/>
+  <rect class="pill" x="489" y="213" width="348" height="20"/>
+  <text class="tD" x="663" y="228">agent_id assigned &#183; persist to state file</text>
 
-  <!-- loop brace + label (agent side) -->
-  <line class="sga" x1="985" y1="326" x2="985" y2="386" stroke-width="2"/>
-  <line class="sga" x1="975" y1="326" x2="985" y2="326" stroke-width="2"/>
-  <line class="sga" x1="975" y1="386" x2="985" y2="386" stroke-width="2"/>
-  <text class="tM tS" x="1012" y="344" font-size="12">every interval &#177; jitter</text>
-  <text class="tM tS" x="1012" y="363" font-size="12">(default 10 s)</text>
+  <!-- 3 create task (sd) -->
+  <line class="sd" x1="200" y1="258" x2="516" y2="258" marker-end="url(#ad)"/>
+  <rect class="pill" x="170" y="225" width="377" height="20"/>
+  <text class="tD" x="358" y="240">create task: type + args (SQLite queue)</text>
 
-  <!-- 4. server hands a task -->
-  <line class="sg" x1="560" y1="450" x2="924" y2="450" marker-end="url(#ag)"/>
-  <text class="tM tW" x="747" y="434" font-size="13" text-anchor="middle">task {type: "shell", args: {command, timeout}}</text>
+  <!-- 4 checkin (solid) + loop -->
+  <line class="sg" x1="810" y1="325" x2="524" y2="325" marker-end="url(#ag)"/>
+  <text class="tM" x="667" y="307">POST /api/checkin {agent_id}</text>
 
-  <!-- 5. agent executes -->
-  <rect class="box" x="750" y="494" width="350" height="56" rx="8"/>
-  <text class="tM tW" x="930" y="517" font-size="12" text-anchor="middle">execute task locally</text>
-  <text class="tM tD" x="930" y="536" font-size="11" text-anchor="middle">shell &#183; download &#183; upload &#183; keylog &#183; steal &#8230;</text>
+  <line class="sgl" x1="845" y1="314" x2="845" y2="372"/>
+  <path class="sgl" d="M 835 314 L 845 314 M 835 372 L 845 372 M 835 314 L 825 314 M 835 372 L 825 372"/>
+  <text class="tS" x="875" y="330" text-anchor="start">every interval &#177; jitter</text>
+  <text class="tS" x="875" y="348" text-anchor="start">(default 10 s)</text>
 
-  <!-- 6. result -->
-  <line class="sg" x1="930" y1="590" x2="566" y2="590" marker-end="url(#ag)"/>
-  <text class="tM tW" x="747" y="576" font-size="13" text-anchor="middle">POST /api/result {task_id, output, exit_code}</text>
+  <!-- 5 checkin reply (sd) -->
+  <line class="sd" x1="520" y1="360" x2="806" y2="360" marker-end="url(#ad)"/>
+  <rect class="pill" x="473" y="373" width="380" height="20"/>
+  <text class="tD" x="663" y="388">200 {tasks: [...]} &#183; 404 unknown &#8594; re-register</text>
 
-  <!-- 7. dashboard update -->
-  <line class="sd" x1="560" y1="640" x2="216" y2="640" marker-end="url(#ad)"/>
-  <text class="tM tD" x="383" y="626" font-size="13" text-anchor="middle">dashboard updates &#183; auto-retry unacked tasks</text>
+  <!-- 6 task (solid) -->
+  <line class="sg" x1="520" y1="430" x2="806" y2="430" marker-end="url(#ag)"/>
+  <rect class="pill" x="470" y="397" width="387" height="20"/>
+  <text class="tM" x="663" y="412">task {type: &quot;shell&quot;, args: {command, timeout}}</text>
 
-  <!-- idle -->
-  <text class="tM tS" x="560" y="710" font-size="12" text-anchor="middle">sleep interval &#177; jitter &#160;&#183;&#160; unacked tasks re-sent after C2_RETRY_AFTER</text>
+  <!-- 7 execute box -->
+  <rect class="box" x="675" y="468" width="270" height="56"/>
+  <text class="bd" x="810" y="489">EXECUTE TASK (LOCALLY)</text>
+  <text class="bb" x="810" y="508">shell &#183; upload &#183; download &#183; keylog &#183; steal</text>
 
-  <line class="op" x1="70" y1="830" x2="1130" y2="830"/>
-  <text class="tM tS" x="600" y="860" font-size="13" text-anchor="middle">one wire protocol &#160;&#183;&#160; 14 language clients &#160;&#183;&#160; SQLite-backed task queue</text>
+  <!-- 8 result (solid) -->
+  <line class="sg" x1="810" y1="585" x2="524" y2="585" marker-end="url(#ag)"/>
+  <rect class="pill" x="481" y="598" width="371" height="20"/>
+  <text class="tM" x="667" y="613">POST /api/result {task_id, output, exit_code}</text>
+
+  <!-- 9 dashboard (sd) -->
+  <line class="sd" x1="520" y1="650" x2="204" y2="650" marker-end="url(#ad)"/>
+  <rect class="pill" x="174" y="617" width="371" height="20"/>
+  <text class="tD" x="360" y="632">dashboard updates &#183; auto-retry unacked tasks</text>
+
+  <!-- 10 idle note -->
+  <rect class="pill" x="361" y="705" width="558" height="20"/>
+  <text class="tD" x="640" y="720">sleep interval &#177; jitter &#183; unacked tasks re-sent after C2_RETRY_AFTER</text>
+
+  <!-- lateral movement -->
+  <text x="30" y="766" class="sec">— LATERAL MOVEMENT —</text>
+
+  <!-- 11 lateral task (sd) -->
+  <line class="sd" x1="520" y1="800" x2="806" y2="800" marker-end="url(#ad)"/>
+  <rect class="pill" x="392" y="783" width="480" height="20"/>
+  <text class="tM" x="632" y="798">lateral task {subnet} + creds (C2_LAT_USER / C2_LAT_PASS)</text>
+
+  <!-- 12 lateral execute box -->
+  <rect class="box" x="675" y="830" width="270" height="60"/>
+  <text class="bd" x="810" y="849">SCAN LAN (arp -a / ip neigh)</text>
+  <text class="bb" x="810" y="866">copy self + relaunch on each peer</text>
+  <text class="bb" x="810" y="880">net use / sshpass scp</text>
+
+  <!-- 13 deploy (solid agent->peer) -->
+  <line class="sga" x1="810" y1="910" x2="1066" y2="910" marker-end="url(#ag)"/>
+  <rect class="pill" x="759" y="877" width="363" height="20"/>
+  <text class="tM" x="940" y="892">deploy agent &#183; start (net use / sshpass scp)</text>
+
+  <!-- 14 peer registers (solid peer->server) -->
+  <line class="sga" x1="1070" y1="950" x2="524" y2="950" marker-end="url(#ag)"/>
+  <rect class="pill" x="635" y="917" width="324" height="20"/>
+  <text class="tM" x="797" y="932">POST /api/register (new peer agent joins)</text>
+
+  <!-- peer note -->
+  <text class="tS" x="1070" y="985">peer re-enters register &#8594; checkin loop</text>
+
+  <!-- footer -->
+  <line class="sgl" x1="50" y1="1010" x2="1150" y2="1010"/>
+  <text class="tS" x="600" y="1032">one wire protocol &#183; 14 client languages &#183; agent tokens &#183; SQLite task queue</text>
 </svg>
