@@ -2103,12 +2103,42 @@ def _source_hash(language: str) -> str:
     return h.hexdigest()[:16]
 
 
+def _dotnet_home_dir() -> str | None:
+    """Root of a dotnet-install.sh SDK install (~/.dotnet on Unix), or None.
+
+    The installer places the `dotnet` driver there but only exports PATH for
+    its own process (it appends the export to ~/.bashrc), so a server started
+    from a fresh shell may not find `dotnet`. Probe the default location so
+    server-side C# builds keep working regardless.
+    """
+    if sys.platform == "win32":
+        return None
+    root = Path.home() / ".dotnet"
+    if (root / "dotnet").is_file() or (root / "bin" / "dotnet").is_file():
+        return str(root)
+    return None
+
+
+def _build_env() -> dict:
+    """Environment for build subprocesses: if `dotnet` is not already on PATH
+    but lives under ~/.dotnet (dotnet-install.sh layout), prepend it and set
+    DOTNET_ROOT. Returns the current environ otherwise."""
+    env = dict(os.environ)
+    if shutil.which("dotnet") is None:
+        root = _dotnet_home_dir()
+        if root:
+            env["PATH"] = root + os.pathsep + env.get("PATH", "")
+            env.setdefault("DOTNET_ROOT", root)
+    return env
+
+
 def _detect_dotnet_version() -> str:
     """Pick the highest installed Microsoft.NETCore.App major, e.g. 'net10.0'.
     Fall back to net8.0 if dotnet/runtime detection fails."""
     try:
         r = subprocess.run(["dotnet", "--list-runtimes"],
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, timeout=30,
+                           env=_build_env())
         majors = sorted({
             int(line.split(" ")[0].split(".")[0])
             for line in r.stdout.splitlines()
@@ -2309,7 +2339,7 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
 """, encoding="utf-8")
             rc, out = _run_build_cmd(
                 ["dotnet", "publish", "-c", "Release", "-o", "_c2out", "--nologo"],
-                cwd=work, on_line=on_line, timeout=120
+                cwd=work, env=_build_env(), on_line=on_line, timeout=120
             )
             if rc != 0:
                 return None, out.strip()

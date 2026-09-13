@@ -167,12 +167,33 @@ ensure_venv() {
 }
 
 # ------------ builder toolchain ------------
+persist_dotnet_path() {
+    # dotnet-install.sh installs to ~/.dotnet but only exports PATH for the
+    # installing shell; make `dotnet` callable from new shells too by adding
+    # the export to the user's shell profile (skipped if already present).
+    local line='export PATH="$HOME/.dotnet:$PATH"'
+    local dest="$HOME/.profile"
+    case "${SHELL##*/}" in
+        zsh)  dest="$HOME/.zshrc" ;;
+        bash) dest="$HOME/.bashrc" ;;
+    esac
+    if [ -f "$dest" ] && grep -qsF "$line" "$dest"; then
+        return 0
+    fi
+    mkdir -p "$(dirname "$dest")"
+    printf '\n# .NET SDK (installed by dotnet-install.sh)\n%s\n' "$line" >> "$dest"
+    info "added '$line' to $dest (start a new shell to take effect)"
+}
+
 check_toolchain() {
     log "Builder toolchain (needed for 'build on server')"
     # dotnet-install.sh installs to ~/.dotnet; a fresh shell may not have it
-    # on PATH yet, so probe the default location as well.
-    if ! command -v dotnet >/dev/null 2>&1 && [ -x "$HOME/.dotnet/dotnet" ]; then
+    # on PATH yet, so probe the default location as well and persist the
+    # export so later shells (and servers) resolve `dotnet` too.
+    if ! command -v dotnet >/dev/null 2>&1 &&
+       { [ -x "$HOME/.dotnet/dotnet" ] || [ -x "$HOME/.dotnet/bin/dotnet" ]; }; then
         export PATH="$HOME/.dotnet:$PATH"
+        persist_dotnet_path
     fi
     missing=()
     missing_count=0
