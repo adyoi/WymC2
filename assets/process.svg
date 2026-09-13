@@ -62,15 +62,13 @@
   <rect class="pill" x="170" y="257" width="377" height="20"/>
   <text class="tD" x="358" y="272">create task: type + args (SQLite queue)</text>
 
-  <!-- 4 checkin (solid) + self-loop brace -->
+  <!-- 4 checkin (solid) + self-loop bracket -->
   <line class="sg" x1="810" y1="345" x2="524" y2="345" marker-end="url(#ag)"/>
   <text class="tM" x="667" y="327">POST /api/checkin {agent_id}</text>
 
-  <line class="sgl" x1="860" y1="336" x2="860" y2="402"/>
-  <line class="sgl" x1="850" y1="336" x2="860" y2="336"/>
-  <line class="sgl" x1="850" y1="402" x2="860" y2="402"/>
-  <text class="tS" x="935" y="404">every interval &#177; jitter</text>
-  <text class="tS" x="935" y="418">(default 10 s)</text>
+  <path class="sgl" d="M 856 336 H 846 V 384 H 856"/>
+  <text class="tS" x="866" y="352" text-anchor="start">every interval &#177; jitter</text>
+  <text class="tS" x="866" y="370" text-anchor="start">(default 10 s)</text>
 
   <!-- 5 checkin reply (sd) -->
   <line class="sd" x1="520" y1="390" x2="806" y2="390" marker-end="url(#ad)"/>

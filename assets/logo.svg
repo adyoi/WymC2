@@ -9,8 +9,9 @@
       .tag  { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; fill: #7a9a82; letter-spacing: 4px; }
       .dot  { fill: #3f6a52; }
       .dotb { fill: #5b7a66; }
-      .glyph{ fill: none; stroke: #00ff41; stroke-width: 12; stroke-linecap: square; stroke-linejoin: miter; }
-      .chn  { fill: none; stroke: #00ff41; stroke-width: 4; stroke-linecap: square; }
+      .seg  { fill: none; stroke: #00ff41; stroke-width: 10; stroke-linecap: round; }
+      .nod  { fill: #00ff41; }
+      .nod2 { fill: #e6ffe9; }
     </style>
     <pattern id="mesh" width="28" height="28" patternUnits="userSpaceOnUse">
       <circle cx="2" cy="2" r="1" fill="#00ff41" opacity="0.22"/>
@@ -26,10 +27,23 @@
   <!-- hexagon symbol, matched to the text block height (78..242) and centered at (258,160) -->
   <polygon class="hex" points="258,78 329,121 329,199 258,242 187,199 187,121"/>
 
-  <!-- monogram: angular Decepticon-style W, sharp mitered zigzag + chin bar + antenna -->
-  <path class="glyph" d="M 232 134 L 246 192 L 258 128 L 270 192 L 284 134"/>
-  <line class="chn" x1="240" y1="192" x2="276" y2="192"/>
-  <path class="chn" d="M 247 128 L 258 112 L 269 128"/>
+  <!-- monogram: futuristic circuit-trace W (segmented strokes + joint nodes) -->
+  <line class="seg" x1="234" y1="136" x2="246" y2="188"/>
+  <line class="seg" x1="250" y1="186" x2="257" y2="134"/>
+  <line class="seg" x1="259" y1="134" x2="266" y2="186"/>
+  <line class="seg" x1="270" y1="188" x2="282" y2="136"/>
+  <circle class="nod2" cx="258" cy="132" r="5"/>
+  <circle class="nod" cx="247" cy="191" r="3"/>
+  <circle class="nod" cx="269" cy="191" r="3"/>
+
+  <!-- right-side data bus (fills the void beside the wordmark) -->
+  <line class="orbit" x1="1104" y1="104" x2="1104" y2="252"/>
+  <circle cx="1104" cy="116" r="2.4" class="dotb"/>
+  <circle cx="1104" cy="152" r="2.4" class="dotb"/>
+  <circle cx="1104" cy="190" r="2.4" class="dotb"/>
+  <circle cx="1104" cy="226" r="2.4" class="dotb"/>
+  <circle cx="1104" cy="132" r="1.6" class="dot"/>
+  <circle cx="1104" cy="204" r="1.6" class="dot"/>
 
   <!-- ambient starfield dots -->
   <circle cx="88" cy="30" r="2.0" class="dot"/>
@@ -61,9 +75,8 @@
   <circle cx="112" cy="94" r="1.6" class="dot"/>
   <circle cx="84" cy="150" r="2.2" class="dotb"/>
   <circle cx="128" cy="208" r="1.6" class="dot"/>
-  <circle cx="1106" cy="120" r="2.0" class="dot"/>
-  <circle cx="1080" cy="180" r="1.4" class="dotb"/>
-  <circle cx="1122" cy="234" r="2.0" class="dot"/>
+  <circle cx="1088" cy="82" r="1.6" class="dot"/>
+  <circle cx="966" cy="308" r="1.6" class="dot"/>
 
   <!-- wordmark (single line, two-tone) -->
   <text class="t1" x="416" y="157" font-size="88">WYM</text>
