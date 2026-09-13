@@ -84,8 +84,4 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - name: C# (.NET)
-        run: |
-          mkdir -p /tmp/cs && cd /tmp/cs
-          dotnet new console -o app --force
-          cp "$GITHUB_WORKSPACE"/clients/agent.cs app/Program.cs
-          dotnet build app -o out -q -p:UseSharedCompilation=false
+        run: dotnet build clients/agent.csproj -c Release -q --disable-build-servers

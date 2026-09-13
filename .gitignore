@@ -44,6 +44,7 @@ clients/target/
 clients/*.class
 clients/.venv/
 clients/bin/
+clients/obj/
 clients/include/
 clients/lib/
 clients/lib64
