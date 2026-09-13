@@ -7,11 +7,8 @@
       .t1   { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-weight: bold; fill: #00ff41; }
       .t2   { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; font-weight: bold; fill: #e6ffe9; }
       .tag  { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; fill: #7a9a82; letter-spacing: 4px; }
-      .dot  { fill: #3f6a52; }
-      .dotb { fill: #5b7a66; }
       .glyph  { fill: none; stroke: #00ff41; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
       .nod  { fill: #00ff41; }
-      .nod2 { fill: #e6ffe9; }
     </style>
     <pattern id="mesh" width="28" height="28" patternUnits="userSpaceOnUse">
       <circle cx="2" cy="2" r="1" fill="#00ff41" opacity="0.22"/>
@@ -32,39 +29,6 @@
   <circle class="nod" cx="242" cy="192" r="3.5"/>
   <circle class="nod" cx="258" cy="132" r="3.5"/>
   <circle class="nod" cx="274" cy="192" r="3.5"/>
-
-  <!-- ambient starfield dots -->
-  <circle cx="88" cy="30" r="2.0" class="dot"/>
-  <circle cx="170" cy="38" r="1.4" class="dotb"/>
-  <circle cx="246" cy="24" r="2.2" class="dot"/>
-  <circle cx="330" cy="42" r="1.3" class="dotb"/>
-  <circle cx="408" cy="26" r="2.0" class="dot"/>
-  <circle cx="500" cy="40" r="1.5" class="dotb"/>
-  <circle cx="590" cy="24" r="2.2" class="dot"/>
-  <circle cx="672" cy="40" r="1.3" class="dotb"/>
-  <circle cx="762" cy="26" r="2.0" class="dot"/>
-  <circle cx="846" cy="40" r="1.5" class="dotb"/>
-  <circle cx="930" cy="24" r="2.2" class="dot"/>
-  <circle cx="1022" cy="38" r="1.3" class="dotb"/>
-  <circle cx="1112" cy="30" r="2.0" class="dot"/>
-  <circle cx="70" cy="262" r="1.5" class="dotb"/>
-  <circle cx="150" cy="290" r="2.2" class="dot"/>
-  <circle cx="232" cy="272" r="1.3" class="dotb"/>
-  <circle cx="322" cy="298" r="2.0" class="dot"/>
-  <circle cx="420" cy="266" r="1.5" class="dotb"/>
-  <circle cx="505" cy="292" r="2.2" class="dot"/>
-  <circle cx="600" cy="270" r="1.3" class="dotb"/>
-  <circle cx="688" cy="296" r="2.0" class="dot"/>
-  <circle cx="782" cy="268" r="1.5" class="dotb"/>
-  <circle cx="872" cy="294" r="2.2" class="dot"/>
-  <circle cx="960" cy="272" r="1.3" class="dotb"/>
-  <circle cx="1050" cy="298" r="2.0" class="dot"/>
-  <circle cx="1138" cy="266" r="1.5" class="dotb"/>
-  <circle cx="112" cy="94" r="1.6" class="dot"/>
-  <circle cx="84" cy="150" r="2.2" class="dotb"/>
-  <circle cx="128" cy="208" r="1.6" class="dot"/>
-  <circle cx="1088" cy="82" r="1.6" class="dot"/>
-  <circle cx="966" cy="308" r="1.6" class="dot"/>
 
   <!-- wordmark (single line, two-tone) -->
   <text class="t1" x="416" y="157" font-size="88">WYM</text>

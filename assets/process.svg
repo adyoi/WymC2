@@ -67,8 +67,8 @@
   <text class="tM" x="667" y="327">POST /api/checkin {agent_id}</text>
 
   <path class="sgl" d="M 856 336 H 846 V 384 H 856"/>
-  <text class="tS" x="866" y="352" text-anchor="start">every interval &#177; jitter</text>
-  <text class="tS" x="866" y="370" text-anchor="start">(default 10 s)</text>
+  <text class="tS" x="946" y="355" text-anchor="start">every interval &#177; jitter</text>
+  <text class="tS" x="946" y="373" text-anchor="start">(default 10 s)</text>
 
   <!-- 5 checkin reply (sd) -->
   <line class="sd" x1="520" y1="390" x2="806" y2="390" marker-end="url(#ad)"/>
