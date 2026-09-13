@@ -14,15 +14,14 @@
     </pattern>
   </defs>
 
-  <rect class="bg" x="8" y="8" width="1184" height="304" rx="36"/>
-  <rect x="8" y="8" width="1184" height="304" rx="36" fill="url(#mesh)" opacity="0.05"/>
+  <rect class="bg" x="0" y="0" width="1200" height="320" rx="36"/>
+  <rect x="0" y="0" width="1200" height="320" rx="36" fill="url(#mesh)" opacity="0.05"/>
 
   <!-- hexagon grid frame -->
   <polygon class="hex" points="170,60 263,118 263,234 170,292 77,234 77,118"/>
 
-  <!-- terminal prompt symbol: chevron + block cursor -->
-  <path d="M 149 136 L 175 166 L 149 196" fill="none" stroke="#00ff41" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="194" y="132" width="23" height="68" rx="4" fill="#00ff41"/>
+  <!-- monogram: W -->
+  <text class="t1" x="170" y="212" font-size="100" text-anchor="middle">W</text>
 
   <!-- ambient grid dots -->
   <circle cx="198" cy="40" r="3" class="dot"/>
@@ -31,7 +30,7 @@
 
   <!-- wordmark (single line, two-tone) -->
   <text class="t1" x="330" y="150" font-size="88">WYM</text>
-  <text class="t2" x="542" y="150" font-size="88">C2</text>
+  <text class="t2" x="496" y="150" font-size="88">C2</text>
 
   <!-- tagline -->
   <text class="tag" x="330" y="202" font-size="20">COMMAND &amp; CONTROL FRAMEWORK</text>
