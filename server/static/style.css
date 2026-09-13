@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1a2e1f; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2a4e35; }
+
+/* ---- Grid background ---- */
+.grid-bg {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    linear-gradient(rgba(0,255,65,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,65,.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none; z-index: 0;
+}
+
+/* ---- Alerts ---- */
+.alert-error {
+  background: rgba(255,51,51,.08); border: 1px solid rgba(255,51,51,.3);
+  color: #ff6666; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;
+}
+.alert-ok {
+  background: rgba(0,255,65,.08); border: 1px solid rgba(0,255,65,.3);
+  color: #00ff41; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;
+}
+
+/* ---- xterm ---- */
+.xterm { padding: 10px; }
+.xterm .xterm-viewport { overflow-y: auto !important; }

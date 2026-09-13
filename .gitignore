@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+.venv-wsl/
+venv/
+ENV/
+
+.pytest_cache/
+.pytest_cache
+
+# Server data
+server/c2.db
+server/c2_wsl.db
+server/.agent_token
+server/.agent_token_wsl
+server/.server.pid
+server/.server.port
+server/.server.pid_wsl
+server/.server.port_wsl
+server/*.log
+server/*.err.log
+server/server.out.log
+server/server.err.log
+server/builds/*
+server/shared/*
+server/collected/*
+!server/builds/.gitkeep
+!server/shared/.gitkeep
+!server/collected/.gitkeep
+
+# Agent state + local runtime artifacts
+clients/.c2agent.json
+clients/*.log
+clients/*.err.log
+clients/agent.exe
+clients/*.class
+clients/.venv/
+clients/bin/
+clients/include/
+clients/lib/
+clients/lib64
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

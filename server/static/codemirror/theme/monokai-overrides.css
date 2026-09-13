@@ -1,0 +1,5 @@
+/* Monokai visibility overrides: active line + text selection */
+.cm-s-monokai .CodeMirror-activeline-background { background: rgba(166, 226, 46, 0.10) !important; }
+.cm-s-monokai .CodeMirror-activeline-gutter { background: rgba(166, 226, 46, 0.10) !important; }
+.cm-s-monokai div.CodeMirror-selected { background: rgba(249, 38, 114, 0.18) !important; }
+.cm-s-monokai.CodeMirror-focused div.CodeMirror-selected { background: rgba(249, 38, 114, 0.22) !important; }

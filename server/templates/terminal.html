@@ -1,0 +1,131 @@
+﻿{% extends "base.html" %}
+{% block title %}Terminal - Wym C2{% endblock %}
+{% block content %}
+<div class="rounded-xl border border-dark-400 overflow-hidden bg-black" style="height: calc(100vh - 120px); min-height: 500px; display:flex; flex-direction:column;">
+  <div class="flex items-center gap-2 px-4 py-2 bg-dark-600 border-b border-dark-400 shrink-0">
+    <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+    <span class="w-3 h-3 rounded-full bg-yellow-500/80"></span>
+    <span class="w-3 h-3 rounded-full bg-green-500/80"></span>
+    <span class="ml-3 text-xs font-mono text-muted">Server Terminal</span>
+    <span class="ml-auto text-xs font-mono" id="term-status">connecting...</span>
+  </div>
+  <div id="terminal" style="flex:1; min-height:0;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/xterm/xterm.umd.min.js"></script>
+<script src="/static/xterm/addon-fit.umd.min.js"></script>
+<script src="/static/xterm/addon-web-links.umd.min.js"></script>
+<script>
+(function(){
+  var statusEl = document.getElementById('term-status');
+  var termDiv = document.getElementById('terminal');
+
+  var term = new Terminal({
+    theme: {
+      background: '#000000',
+      foreground: '#d4e8d9',
+      cursor: '#00ff41',
+      cursorAccent: '#000000',
+      selectionBackground: 'rgba(0,255,65,0.25)',
+      selectionForeground: '#ffffff',
+      black: '#0a0a0a',
+      red: '#ff3333',
+      green: '#00ff41',
+      yellow: '#ccff00',
+      blue: '#00ccff',
+      magenta: '#cc00ff',
+      cyan: '#00ccff',
+      white: '#d4e8d9',
+      brightBlack: '#4a6a52',
+      brightRed: '#ff6666',
+      brightGreen: '#33ff66',
+      brightYellow: '#ddff33',
+      brightBlue: '#33ddff',
+      brightMagenta: '#dd33ff',
+      brightCyan: '#33ddff',
+      brightWhite: '#ffffff',
+    },
+    fontFamily: 'JetBrains Mono, Cascadia Code, Consolas, monospace',
+    fontSize: 14,
+    cursorBlink: true,
+    cursorStyle: 'bar',
+    cursorWidth: 2,
+    scrollback: 5000,
+    allowProposedApi: true,
+    convertEol: false,
+    termName: 'xterm-256color',
+  });
+
+  var fitAddon = new FitAddon.FitAddon();
+  var webLinksAddon = new WebLinksAddon.WebLinksAddon();
+  term.loadAddon(fitAddon);
+  term.loadAddon(webLinksAddon);
+  term.open(termDiv);
+
+  requestAnimationFrame(function(){
+    fitAddon.fit();
+    term.focus();
+  });
+
+  var ws = null;
+
+  function connect(){
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + location.host + '/ws/terminal');
+
+    ws.onopen = function(){
+      statusEl.textContent = 'connected';
+      statusEl.className = 'ml-auto text-xs font-mono text-green-400';
+      term.focus();
+    };
+    ws.onmessage = function(e){
+      term.write(e.data);
+    };
+    ws.onclose = function(){
+      statusEl.textContent = 'disconnected';
+      statusEl.className = 'ml-auto text-xs font-mono text-red-400';
+      term.write('\r\n\x1b[31m[Connection closed - refresh to reconnect]\x1b[0m\r\n');
+    };
+    ws.onerror = function(){
+      statusEl.textContent = 'error';
+      statusEl.className = 'ml-auto text-xs font-mono text-red-400';
+    };
+  }
+
+  // PTY mode: just forward every keystroke directly - shell handles echo
+  term.onData(function(data){
+    if(ws && ws.readyState === 1){
+      ws.send(data);
+    }
+  });
+
+  // Resize: debounce, then send to server via custom message
+  var resizeTimer;
+  function doResize(){
+    var cols = term.cols;
+    var rows = term.rows;
+    if(ws && ws.readyState === 1){
+      ws.send(JSON.stringify({type:'resize', cols: cols, rows: rows}));
+    }
+  }
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){
+      fitAddon.fit();
+      doResize();
+    }, 200);
+  });
+  new ResizeObserver(function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){
+      fitAddon.fit();
+      doResize();
+    }, 200);
+  }).observe(termDiv);
+
+  connect();
+})();
+</script>
+{% endblock %}

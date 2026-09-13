@@ -1,0 +1,845 @@
+﻿{% extends "base.html" %}
+{% block title %}Agent Builder - Wym C2{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/codemirror/codemirror.min.css">
+<link rel="stylesheet" href="/static/codemirror/theme/monokai.min.css?v=2">
+<link rel="stylesheet" href="/static/codemirror/theme/monokai-overrides.css?v=1">
+<link rel="stylesheet" href="/static/codemirror/addon/selection/active-line.css">
+<style>
+  #src-file-editor .CodeMirror,
+  #src-editor .CodeMirror {
+    height: 100%;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  #src-file-editor .CodeMirror-scroll,
+  #src-editor .CodeMirror-scroll {
+    height: 100%;
+  }
+  #src-file-editor .CodeMirror-gutters,
+  #src-editor .CodeMirror-gutters {
+    border-right: 1px solid rgba(0,255,65,0.08);
+  }
+  #src-file-editor .CodeMirror-cursor,
+  #src-editor .CodeMirror-cursor {
+    border-left-width: 2px;
+  }
+</style>
+<h1 class="text-xl font-bold text-accent mb-6">Agent Builder</h1>
+
+<div class="bg-dark-600 border border-dark-400 rounded-xl p-5 mb-6">
+  <h2 class="text-sm font-bold text-accent uppercase tracking-wider mb-3">Agent Tokens</h2>
+  <div class="flex flex-wrap gap-3 mb-3">
+    <div class="flex-1 min-w-[160px]">
+      <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Label</label>
+      <input type="text" id="tk-name" placeholder="e.g. lab-server" autocomplete="off"
+        class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+    </div>
+    <div class="flex-1 min-w-[200px]">
+      <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Server URL</label>
+      <input type="text" id="tk-server" placeholder="{{ default_server }}" value="{{ default_server }}" autocomplete="off"
+        class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+    </div>
+    <div class="flex items-end">
+      <button type="button" id="tk-add" class="px-4 py-2 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer whitespace-nowrap">+ Add Token</button>
+    </div>
+  </div>
+  <div id="tk-list" class="text-sm"></div>
+</div>
+
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const tkName = $('#tk-name');
+  const tkServer = $('#tk-server');
+  const tkList = $('#tk-list');
+  let tokens = [];
+
+  async function loadTokens(){
+    const r = await fetch('/api/tokens');
+    const d = await r.json();
+    tokens = d.tokens || [];
+    render();
+  }
+  function render(){
+    if(!tokens.length){
+      tkList.innerHTML = '<div class="text-muted py-2">No tokens yet. Create one above.</div>';
+      return;
+    }
+    tkList.innerHTML = tokens.map(t => {
+      const used = t.last_used ? ago(t.last_used) : 'never used';
+      return `<div class="flex items-center gap-3 px-3 py-2 bg-dark-800 border border-dark-400 rounded-lg mb-2">
+        <span class="font-semibold min-w-[80px] text-sm">${esc(t.name)}</span>
+        <code class="flex-1 text-xs text-accent select-all font-mono">${esc(t.token)}</code>
+        <span class="text-muted text-[11px] min-w-[100px] text-right">${used}</span>
+        <button class="tk-del px-2 py-1 text-[10px] font-mono border border-red-500/30 text-red-400 rounded hover:bg-red-500/10 transition cursor-pointer" data-token="${esc(t.token)}">delete</button>
+      </div>`;
+    }).join('');
+  }
+  $('#tk-add').addEventListener('click', async () => {
+    const name = tkName.value.trim();
+    if(!name){ tkName.focus(); return; }
+    await fetch('/api/tokens', {
+      method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':CSRF_TOKEN},
+      body: JSON.stringify({name, server_url: tkServer.value.trim()})
+    });
+    tkName.value = '';
+    loadTokens();
+  });
+  tkList.addEventListener('click', async e => {
+    const btn = e.target.closest('.tk-del');
+    if(!btn) return;
+    if(!confirm('Delete this token? Agents using it will lose connection.')) return;
+    await fetch('/api/tokens/' + encodeURIComponent(btn.dataset.token), {method:'DELETE', headers:{'X-CSRF-Token':CSRF_TOKEN}});
+    loadTokens();
+  });
+  tkName.addEventListener('keydown', e => { if(e.key==='Enter') $('#tk-add').click(); });
+  loadTokens();
+})();
+</script>
+
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mb-3">Build Command</h2>
+<p class="text-xs text-muted mb-4">Select token, language, target and shell. For compiled languages the server can cross-compile to a binary.</p>
+
+<form method="post" action="/generate" id="gen-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+  <div>
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Token</label>
+    <select name="token" id="gen-token" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+      <option value=>Default (auto-generated)</option>
+    </select>
+  </div>
+  <div>
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Language</label>
+    <select name="language" id="gen-lang" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+      <optgroup label="Interpreted">
+        <option value="python" {% if gen_language|default('python')=='python' %}selected{% endif %}>Python</option>
+        <option value="nodejs" {% if gen_language|default('')=='nodejs' %}selected{% endif %}>Node.js</option>
+        <option value="bash" {% if gen_language|default('')=='bash' %}selected{% endif %}>Bash</option>
+        <option value="powershell" {% if gen_language|default('')=='powershell' %}selected{% endif %}>PowerShell</option>
+        <option value="php" {% if gen_language|default('')=='php' %}selected{% endif %}>PHP</option>
+        <option value="ruby" {% if gen_language|default('')=='ruby' %}selected{% endif %}>Ruby</option>
+        <option value="perl" {% if gen_language|default('')=='perl' %}selected{% endif %}>Perl</option>
+        <option value="lua" {% if gen_language|default('')=='lua' %}selected{% endif %}>Lua</option>
+      </optgroup>
+      <optgroup label="Compiled">
+        <option value="go" {% if gen_language|default('')=='go' %}selected{% endif %}>Go</option>
+        <option value="rust" {% if gen_language|default('')=='rust' %}selected{% endif %}>Rust</option>
+        <option value="csharp" {% if gen_language|default('')=='csharp' %}selected{% endif %}>C# / .NET</option>
+        <option value="c" {% if gen_language|default('')=='c' %}selected{% endif %}>C</option>
+        <option value="cpp" {% if gen_language|default('')=='cpp' %}selected{% endif %}>C++</option>
+        <option value="java" {% if gen_language|default('')=='java' %}selected{% endif %}>Java</option>
+      </optgroup>
+    </select>
+  </div>
+  <div>
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Payload</label>
+    <select name="shell_os" id="gen-shell-os" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+      <option value="win-irm" {% if gen_shell_os|default('win-irm')=='win-irm' %}selected{% endif %}>Windows (irm)</option>
+      <option value="win-iex" {% if gen_shell_os|default('')=='win-iex' %}selected{% endif %}>Windows (iex)</option>
+      <option value="unix-curl" {% if gen_shell_os|default('')=='unix-curl' %}selected{% endif %}>Linux &amp; Darwin (Curl)</option>
+      <option value="unix-wget" {% if gen_shell_os|default('')=='unix-wget' %}selected{% endif %}>Linux &amp; Darwin (wget)</option>
+    </select>
+  </div>
+  <div>
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Server URL</label>
+    <input type="text" name="server" id="gen-server" value="{{ gen_server|default(default_server) }}" placeholder="http://127.0.0.1:8000" autocomplete="off"
+      class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+  </div>
+  <div>
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Interval (s)</label>
+    <input type="number" name="interval" value="{{ gen_interval|default(10) }}" min="1" step="1"
+      class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+  </div>
+  <div>
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Jitter (s)</label>
+    <input type="number" name="jitter" value="{{ gen_jitter|default(0) }}" min="0" step="0.5"
+      class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+  </div>
+</div>
+
+<div class="flex flex-wrap items-center gap-4 mb-4">
+  <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+    <input type="checkbox" name="verbose" class="accent-[#00ff41]" {% if gen_verbose|default(false) %}checked{% endif %}> verbose
+  </label>
+  <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+    <input type="checkbox" name="obfuscate" class="accent-[#00ff41]" {% if gen_obfuscate|default(false) %}checked{% endif %}> obfuscate (AES)
+  </label>
+  <div id="build-server-wrap" class="hidden">
+    <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+      <input type="checkbox" name="build_on_server" id="gen-build-cb" class="accent-[#00ff41]" {% if gen_build_server|default(false) %}checked{% endif %}> build on server
+    </label>
+  </div>
+  <div id="target-wrap" class="hidden min-w-[200px]">
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Target Platform</label>
+    <select name="target" id="gen-target" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+      <option value="win_x64" {% if gen_target|default('win_x64')=='win_x64' %}selected{% endif %}>Windows x64</option>
+      <option value="win_x86" {% if gen_target|default('')=='win_x86' %}selected{% endif %}>Windows x86</option>
+      <option value="linux_x64" {% if gen_target|default('')=='linux_x64' %}selected{% endif %}>Linux x64</option>
+      <option value="linux_arm64" {% if gen_target|default('')=='linux_arm64' %}selected{% endif %}>Linux ARM64</option>
+      <option value="darwin_x64" {% if gen_target|default('')=='darwin_x64' %}selected{% endif %}>macOS x64</option>
+      <option value="darwin_arm64" {% if gen_target|default('')=='darwin_arm64' %}selected{% endif %}>macOS ARM64</option>
+    </select>
+  </div>
+  <div id="ext-wrap" class="hidden w-[190px]">
+    <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Extension</label>
+    <select id="gen-ext-sel" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+      <option value="auto">Auto</option>
+    </select>
+    <input type="text" id="gen-ext-other" placeholder="custom ext (e.g. pem)" style="display:none" autocomplete="off"
+      class="mt-1 w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+    <input type="hidden" name="ext" id="gen-ext" value="{{ gen_ext|default('') }}">
+  </div>
+</div>
+
+<div class="flex flex-wrap items-center gap-3">
+  <button type="submit" class="px-5 py-2.5 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer uppercase tracking-wider">Build Agent</button>
+  <div id="build-min-pill" class="hidden items-center gap-2 px-3 py-2 border border-dark-400 bg-dark-700 rounded-lg text-[10px] font-mono text-muted" style="display:none">
+    <span id="build-min-dot" class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+    <span id="build-min-text">building&#8230;</span>
+    <button type="button" id="build-min-restore" class="ml-1 px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">restore</button>
+  </div>
+</div>
+</form>
+
+{% if gen_build_error|default('') %}
+<div class="mt-4 bg-red-500/10 border border-red-500/40 rounded-xl px-4 py-3 text-xs font-mono text-red-400 whitespace-pre-wrap break-all">build failed for {{ gen_target | default('win_x64') }}: {{ gen_build_error | e }}</div>
+{% endif %}
+
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mt-10 mb-1">Build Log</h2>
+<div class="flex items-center justify-between mb-3">
+  <p class="text-xs text-muted">persisted in <code class="text-green-400/80">builds/logs</code> — track every build error &amp; fix.</p>
+  <div class="flex items-center gap-2">
+    <button type="button" id="build-log-clear" class="px-3 py-1 text-[10px] font-mono border border-danger/40 text-danger rounded hover:bg-danger/10 hover:border-danger transition cursor-pointer">clear</button>
+    <button type="button" id="build-log-refresh" class="px-3 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">refresh</button>
+  </div>
+</div>
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
+  <table class="w-full text-left font-mono text-xs">
+    <thead class="text-[10px] uppercase tracking-wider text-muted border-b border-dark-400">
+      <tr>
+        <th class="px-3 py-2">time</th>
+        <th class="px-3 py-2">build</th>
+        <th class="px-3 py-2">status</th>
+        <th class="px-3 py-2">result</th>
+        <th class="px-3 py-2 text-right">detail</th>
+      </tr>
+    </thead>
+    <tbody id="build-history-body">
+      <tr><td colspan="5" class="px-3 py-4 text-muted" id="build-history-empty">loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+{% if generated %}
+<div class="mt-6 bg-dark-600 border border-accent/30 rounded-xl overflow-hidden">
+  <div class="flex items-center justify-between px-4 py-2.5 border-b border-dark-400">
+    <span class="text-xs text-muted">one-liner command</span>
+    <div class="flex items-center gap-2">
+      <button type="button" id="view-src-btn" class="px-3 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">view source</button>
+      <button type="button" id="copy-btn" class="px-3 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">copy</button>
+    </div>
+  </div>
+  <pre class="p-4 font-mono text-xs text-green-400 overflow-x-auto whitespace-pre-wrap break-all" id="gen-output">{{ generated }}</pre>
+  <div class="flex items-center gap-2 px-4 py-2 border-t border-dark-400 font-mono text-[10px] text-muted">
+    <span class="uppercase text-muted tracking-wider">sha-256</span>
+    <button type="button" id="gen-hash-copy" class="px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer flex-shrink-0">copy</button>
+    <span id="gen-hash" class="text-green-400/80 select-all truncate">{{ gen_installer_hash }}</span>
+  </div>
+</div>
+
+<div id="src-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="display:none">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="src-modal-bd"></div>
+  <div class="relative flex flex-col w-full max-w-4xl self-center bg-dark-600 border border-dark-400 rounded-xl shadow-2xl overflow-hidden" style="height: min(78vh, 720px);">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-dark-400 bg-dark-700 flex-shrink-0">
+      <span class="font-mono text-sm text-accent truncate min-w-0">installer source {{ ' obfuscated (AES)' if gen_obfuscate|default(false) }}</span>
+      <div class="flex items-center gap-2 ml-auto flex-shrink-0">
+        <button type="button" id="src-copy-btn" class="px-3 py-1 font-mono text-xs bg-dark-800 border border-dark-400 text-muted rounded-lg hover:text-accent hover:border-accent/30 transition cursor-pointer">Copy</button>
+        <a id="src-dl-btn" download class="px-3 py-1 font-mono text-xs font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">Download</a>
+        <button type="button" id="src-close-btn" class="text-muted hover:text-accent transition p-1 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="src-editor" spellcheck="false" class="flex-1 overflow-hidden font-mono text-xs bg-dark-900 outline-none" style="min-height:0;"></div>
+    <div class="flex items-baseline gap-4 px-4 py-1.5 border-t border-dark-400 bg-dark-700 text-[10px] font-mono text-muted flex-shrink-0">
+      <span id="src-pos">Ln 1, Col 1</span>
+      <span id="src-lines"></span>
+      <span id="src-mode" class="uppercase"></span>
+      <span class="ml-auto uppercase text-muted">Read-only</span>
+    </div>
+  </div>
+</div>
+<script>
+  {% set inst_ext = 'ps1' if (gen_shell_os|default('win-irm')).startswith('win') else 'sh' %}
+  document.getElementById('copy-btn').addEventListener('click', async () => {
+    await navigator.clipboard.writeText(document.getElementById('gen-output').textContent);
+    document.getElementById('copy-btn').textContent = 'copied!';
+    setTimeout(() => document.getElementById('copy-btn').textContent = 'copy', 1500);
+  });
+  document.getElementById('gen-hash-copy').addEventListener('click', async () => {
+    await navigator.clipboard.writeText(document.getElementById('gen-hash').textContent);
+    const b = document.getElementById('gen-hash-copy');
+    b.textContent = 'copied!';
+    setTimeout(() => b.textContent = 'copy', 1500);
+  });
+  const srcModal = document.getElementById('src-modal');
+  const srcSeed = {{ installer_source|default('')|tojson }};
+  const instHost = document.getElementById('src-editor');
+  const instPos = document.getElementById('src-pos');
+  const instLines = document.getElementById('src-lines');
+  const instMode = document.getElementById('src-mode');
+  let instCm = null;
+  function updateInstStatus() {
+    if (!instCm) return;
+    const cur = instCm.getCursor();
+    instPos.textContent = 'Ln ' + (cur.line + 1) + ', Col ' + (cur.ch + 1);
+    instLines.textContent = instCm.lineCount() + ' lines';
+    try { instMode.textContent = instCm.getMode().name; } catch (e) {}
+  }
+  document.getElementById('view-src-btn').addEventListener('click', () => {
+    const ext = '{{ inst_ext }}';
+    const dl = document.getElementById('src-dl-btn');
+    dl.href = '/agent/{{ gen_language }}/installer.' + ext;
+    dl.setAttribute('download', 'installer.' + ext);
+    if (!instCm) {
+      instCm = CodeMirror(instHost, {
+        value: srcSeed, lineNumbers: true, lineWrapping: true, readOnly: true,
+        theme: 'monokai', mode: ext === 'ps1' ? 'powershell' : 'shell',
+        tabSize: 2, indentUnit: 2, matchBrackets: true, autoCloseBrackets: true,
+        styleActiveLine: true, placeholder: '// empty file',
+      });
+      instCm.on('cursorActivity', updateInstStatus);
+      instCm.on('change', updateInstStatus);
+      updateInstStatus();
+    }
+    srcModal.style.display = 'none';
+    void srcModal.offsetWidth;
+    srcModal.style.display = '';
+    setTimeout(() => instCm.refresh(), 0);
+  });
+  document.getElementById('src-close-btn').addEventListener('click', () => { srcModal.style.display = 'none'; });
+  document.getElementById('src-modal-bd').addEventListener('click', () => { srcModal.style.display = 'none'; });
+  document.getElementById('src-copy-btn').addEventListener('click', async () => {
+    const text = instCm ? instCm.getDoc().getValue() : srcSeed;
+    await navigator.clipboard.writeText(text);
+    document.getElementById('src-copy-btn').textContent = 'copied!';
+    setTimeout(() => document.getElementById('src-copy-btn').textContent = 'copy', 1500);
+  });
+</script>
+{% endif %}
+
+<div id="build-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4" style="display:none">
+  <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" id="build-modal-bd"></div>
+  <div class="relative flex flex-col w-full max-w-3xl self-center bg-dark-600 border border-dark-400 rounded-xl shadow-2xl overflow-hidden" style="height: min(70vh, 640px);">
+    <div class="flex items-center gap-2 px-4 py-2.5 border-b border-dark-400 bg-dark-700 flex-shrink-0">
+      <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+      <span class="w-3 h-3 rounded-full bg-yellow-500/80"></span>
+      <span class="w-3 h-3 rounded-full bg-green-500/80"></span>
+      <span class="ml-3 text-xs font-mono text-accent truncate">server build - <span id="build-modal-title"></span></span>
+      <span class="ml-auto text-xs font-mono" id="build-modal-status">starting</span>
+      <button type="button" id="build-modal-close" class="text-muted hover:text-accent transition p-1 cursor-pointer" title="close" aria-label="close">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="build-terminal" class="flex-1 bg-black overflow-hidden min-h-0"></div>
+    <div class="flex items-center justify-between gap-4 px-4 py-1.5 border-t border-dark-400 bg-dark-700 text-[10px] font-mono text-muted flex-shrink-0">
+      <span id="build-modal-elapsed">0.0s</span>
+      <span id="build-modal-msg" class="truncate"></span>
+      <span id="build-modal-result"></span>
+    </div>
+  </div>
+</div>
+
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mt-8 mb-3">Agent Source</h2>
+<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-2">
+  {% for lang, name in [('python','Python'),('nodejs','Node.js'),('bash','Bash'),('powershell','PowerShell'),('php','PHP'),('ruby','Ruby'),('perl','Perl'),('lua','Lua'),('go','Go'),('rust','Rust'),('csharp','C#'),('c','C'),('cpp','C++'),('java','Java')] %}
+  <button type="button" data-lang="{{ lang }}" data-file="agent.{{ lang }}" class="flex flex-col items-center gap-1.5 px-3 py-3 bg-dark-600 border border-dark-400 rounded-lg hover:border-accent/30 hover:bg-dark-500/50 transition text-center group cursor-pointer">
+    <span class="text-sm font-semibold text-gray-300 group-hover:text-accent transition">{{ name }}</span>
+    <span class="text-[10px] text-muted font-mono">agent.{{ lang }}</span>
+  </button>
+  {% endfor %}
+</div>
+
+<div id="src-file-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="display:none">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="sfm-backdrop"></div>
+  <div class="relative flex flex-col w-full max-w-4xl self-center bg-dark-600 border border-dark-400 rounded-xl shadow-2xl overflow-hidden" style="height: min(78vh, 720px);">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-dark-400 bg-dark-700 flex-shrink-0">
+      <span class="font-mono text-sm text-accent truncate min-w-0">agent source - <span id="src-file-name"></span></span>
+      <div class="flex items-center gap-2 ml-auto flex-shrink-0">
+        <button type="button" id="src-file-copy-btn" class="px-3 py-1 font-mono text-xs bg-dark-800 border border-dark-400 text-muted rounded-lg hover:text-accent hover:border-accent/30 transition cursor-pointer">Copy</button>
+        <a id="src-file-dl-btn" download class="px-3 py-1 font-mono text-xs font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">Download</a>
+        <button type="button" id="src-file-close-btn" class="text-muted hover:text-accent transition p-1 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="src-file-editor" spellcheck="false" class="flex-1 overflow-hidden font-mono text-xs bg-dark-900 outline-none" style="min-height:0;"></div>
+    <div class="flex items-baseline gap-4 px-4 py-1.5 border-t border-dark-400 bg-dark-700 text-[10px] font-mono text-muted flex-shrink-0">
+      <span id="src-file-pos">Ln 1, Col 1</span>
+      <span id="src-file-lines"></span>
+      <span id="src-file-mode" class="uppercase"></span>
+      <span class="ml-auto uppercase text-muted">Read-only</span>
+    </div>
+  </div>
+</div>
+<script src="/static/codemirror/codemirror.min.js"></script>
+<script src="/static/codemirror/addon/mode/simple.min.js"></script>
+<script src="/static/codemirror/mode/xml/xml.min.js"></script>
+<script src="/static/codemirror/mode/javascript/javascript.min.js"></script>
+<script src="/static/codemirror/mode/css/css.min.js"></script>
+<script src="/static/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="/static/codemirror/mode/python/python.min.js"></script>
+<script src="/static/codemirror/mode/shell/shell.min.js"></script>
+<script src="/static/codemirror/mode/clike/clike.min.js"></script>
+<script src="/static/codemirror/mode/markdown/markdown.min.js"></script>
+<script src="/static/codemirror/mode/go/go.min.js"></script>
+<script src="/static/codemirror/mode/rust/rust.min.js"></script>
+<script src="/static/codemirror/mode/php/php.min.js"></script>
+<script src="/static/codemirror/mode/perl/perl.min.js"></script>
+<script src="/static/codemirror/mode/ruby/ruby.min.js"></script>
+<script src="/static/codemirror/mode/lua/lua.min.js"></script>
+<script src="/static/codemirror/mode/powershell/powershell.min.js"></script>
+<script src="/static/codemirror/addon/edit/matchbrackets.min.js"></script>
+<script src="/static/codemirror/addon/edit/closebrackets.min.js"></script>
+<script src="/static/codemirror/addon/selection/active-line.min.js"></script>
+<script src="/static/codemirror/addon/display/placeholder.min.js"></script>
+<script>
+  const sfm = document.getElementById('src-file-modal');
+  const sfo = document.getElementById('src-file-editor');
+  const sfn = document.getElementById('src-file-name');
+  const sfPos = document.getElementById('src-file-pos');
+  const sfLines = document.getElementById('src-file-lines');
+  const sfMode = document.getElementById('src-file-mode');
+  const dlBtn = document.getElementById('src-file-dl-btn');
+  let srcCm = null;
+  function guessSrcMode(name) {
+    const n = (name || '').toLowerCase();
+    const ext = n.split('.').pop();
+    return {
+      py: 'python', js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+      json: 'application/json', sh: 'shell', bash: 'shell', zsh: 'shell', fish: 'shell',
+      ps1: 'powershell', go: 'go', rs: 'rust',
+      html: 'htmlmixed', htm: 'htmlmixed', vue: 'htmlmixed',
+      xml: 'xml', svg: 'xml', xhtml: 'xml', css: 'css',
+      md: 'markdown', markdown: 'markdown',
+      c: 'text/x-csrc', h: 'text/x-csrc', cpp: 'text/x-c++src', cc: 'text/x-c++src',
+      cxx: 'text/x-c++src', hpp: 'text/x-c++src', java: 'text/x-java', cs: 'text/x-csharp',
+      php: 'php', rb: 'ruby', pl: 'perl', lua: 'lua',
+    }[ext] || 'text/plain';
+  }
+  function updateSrcStatus() {
+    if (!srcCm) return;
+    const cur = srcCm.getCursor();
+    sfPos.textContent = 'Ln ' + (cur.line + 1) + ', Col ' + (cur.ch + 1);
+    sfLines.textContent = srcCm.lineCount() + ' lines';
+    try { sfMode.textContent = srcCm.getMode().name; } catch (e) {}
+  }
+  document.querySelectorAll('[data-lang]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang, file = btn.dataset.file;
+      sfn.textContent = file;
+      dlBtn.href = '/download/agent/' + lang;
+      dlBtn.setAttribute('download', file);
+      if (!srcCm) {
+        srcCm = CodeMirror(sfo, {
+          value: '', lineNumbers: true, lineWrapping: true, readOnly: true,
+          theme: 'monokai', mode: 'text/plain', tabSize: 2, indentUnit: 2,
+          matchBrackets: true, autoCloseBrackets: true, styleActiveLine: true,
+          placeholder: '// empty file',
+        });
+        srcCm.on('cursorActivity', updateSrcStatus);
+        srcCm.on('change', updateSrcStatus);
+      }
+      srcCm.getDoc().setValue('loading\u2026');
+      try { srcCm.setOption('mode', guessSrcMode(file)); } catch (e) {}
+      sfm.style.display = 'none';
+      void sfm.offsetWidth;
+      sfm.style.display = '';
+      setTimeout(() => srcCm.refresh(), 0);
+      fetch('/download/agent/' + lang)
+        .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+        .then(t => { srcCm.getDoc().setValue(t); updateSrcStatus(); })
+        .catch(e => { srcCm.getDoc().setValue('error: ' + e.message); updateSrcStatus(); });
+    });
+  });
+  document.getElementById('src-file-close-btn').addEventListener('click', () => { sfm.style.display = 'none'; });
+  document.getElementById('sfm-backdrop').addEventListener('click', () => { sfm.style.display = 'none'; });
+  document.getElementById('src-file-copy-btn').addEventListener('click', async () => {
+    await navigator.clipboard.writeText(srcCm ? srcCm.getDoc().getValue() : '');
+    const b = document.getElementById('src-file-copy-btn');
+    b.textContent = 'copied!';
+    setTimeout(() => b.textContent = 'copy', 1500);
+  });
+</script>
+
+<script>
+(function(){
+  const tokenSel = document.getElementById('gen-token');
+  const usedToken = {{ gen_token|default('')|tojson }};
+  const langSel = document.getElementById('gen-lang');
+  const buildCb = document.getElementById('gen-build-cb');
+  const buildWrap = document.getElementById('build-server-wrap');
+  const targetWrap = document.getElementById('target-wrap');
+  const targetSel = document.getElementById('gen-target');
+  const shellSel = document.getElementById('gen-shell-os');
+  let shellTouched = false;
+  shellSel.addEventListener('change', () => { shellTouched = true; });
+
+  // Keep the Payload shell in sync with the selected target platform (unless
+  // the user picked a shell manually): a Win target needs a Win shell one-liner
+  // and a Linux/macOS target needs a Unix one-liner. Only meaningful while a
+  // build is being requested, and never overrides a manual shell choice.
+  function syncShellFromTarget(){
+    if (shellTouched || !buildCb.checked) return;
+    const fam = (targetSel.value || '').startsWith('win_') ? 'win-irm' : 'unix-curl';
+    if (shellSel.value !== fam) shellSel.value = fam;
+  }
+  targetSel.addEventListener('change', syncShellFromTarget);
+  const compiledLangs = ['go', 'csharp', 'rust', 'c', 'cpp', 'java'];
+  const csharpOnlyWindows = ['csharp'];
+
+  const allTargets = [
+    {v:'win_x64',l:'Windows x64'},{v:'win_x86',l:'Windows x86'},
+    {v:'linux_x64',l:'Linux x64'},{v:'linux_arm64',l:'Linux ARM64'},
+    {v:'darwin_x64',l:'macOS x64'},{v:'darwin_arm64',l:'macOS ARM64'}
+  ];
+  const winTargets = allTargets.filter(t => t.v.startsWith('win_'));
+
+  function rebuildTargets(lang) {
+    const targets = csharpOnlyWindows.includes(lang) ? winTargets : allTargets;
+    const curVal = targetSel.value;
+    const cur = targets.some(t => t.v === curVal) ? curVal : targets[0].v;
+    targetSel.innerHTML = targets.map(t =>
+      `<option value="${t.v}" ${t.v===cur?'selected':''}>${t.l}</option>`
+    ).join('');
+    syncShellFromTarget();
+  }
+
+  const extSel = document.getElementById('gen-ext-sel');
+  const extOther = document.getElementById('gen-ext-other');
+  const extHidden = document.getElementById('gen-ext');
+  const extWrap = document.getElementById('ext-wrap');
+  let extHydrated = false;
+
+  function osFamily(){
+    return (targetSel.value || '').split('_')[0];
+  }
+
+  // Per-OS extension presets: win auto=.exe (options scr/com/cmd + custom),
+  // linux auto=no ext (option out + custom), darwin auto=no ext (custom).
+  function extOptionsFor(){
+    switch(osFamily()){
+      case 'win':   return [{v:'auto',l:'Auto (.exe)'},{v:'scr',l:'.scr'},{v:'com',l:'.com'},{v:'cmd',l:'.cmd'},{v:'custom',l:'other…'}];
+      case 'linux': return [{v:'auto',l:'Auto (no extension)'},{v:'out',l:'.out'},{v:'custom',l:'other…'}];
+      default:      return [{v:'auto',l:'Auto (no extension)'},{v:'custom',l:'other…'}];
+    }
+  }
+
+  function computeExt(){
+    const v = extSel.value;
+    if(v === 'custom'){
+      const s = (extOther.value || '').trim().replace(/^\.+/,'').toLowerCase();
+      return s; // '' → server default for the platform
+    }
+    return v === 'auto' ? '' : v; // '' → server default (exe for win, none otherwise)
+  }
+
+  function applyExtUI(){
+    const opts = extOptionsFor();
+    const presets = opts.filter(o => o.v !== 'auto' && o.v !== 'custom').map(o => o.v);
+    if(!extHydrated && extHidden.value){
+      const saved = extHidden.value.trim().replace(/^\.+/,'').toLowerCase();
+      extSel.value = presets.includes(saved) ? saved : 'custom';
+      if(extSel.value === 'custom') extOther.value = saved;
+      extHydrated = true;
+    }
+    if(!opts.some(o => o.v === extSel.value)) extSel.value = 'auto';
+    extSel.innerHTML = opts.map(o =>
+      `<option value="${o.v}" ${o.v===extSel.value?'selected':''}>${o.l}</option>`
+    ).join('');
+    extOther.style.display = extSel.value === 'custom' ? '' : 'none';
+    extHidden.value = computeExt();
+  }
+  extSel.addEventListener('change', () => {
+    extOther.style.display = extSel.value === 'custom' ? '' : 'none';
+    if(extSel.value === 'custom') extOther.focus();
+    extHidden.value = computeExt();
+  });
+  extOther.addEventListener('input', () => { extHidden.value = computeExt(); });
+
+  function toggleBuildOptions(){
+    const isCompiled = compiledLangs.includes(langSel.value);
+    buildWrap.classList.toggle('hidden', !isCompiled);
+    targetWrap.classList.toggle('hidden', !(isCompiled && buildCb.checked));
+    const showExt = isCompiled && buildCb.checked && langSel.value !== 'java';
+    extWrap.classList.toggle('hidden', !showExt);
+    rebuildTargets(langSel.value);
+    if(showExt) applyExtUI();
+  }
+
+  async function loadTokens(){
+    const r = await fetch('/api/tokens');
+    const d = await r.json();
+    const tokens = d.tokens || [];
+    while(tokenSel.options.length > 1) tokenSel.remove(1);
+    tokens.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.token;
+      o.textContent = t.name + '  ' + t.token.substring(0,8) + '...';
+      o.dataset.server = t.server_url || '';
+      if(t.token === usedToken) o.selected = true;
+      tokenSel.appendChild(o);
+    });
+  }
+  tokenSel.addEventListener('change', () => {
+    const v = tokenSel.value;
+    if(v !== ''){
+      const opt = tokenSel.options[tokenSel.selectedIndex];
+      const saved = opt.dataset.server;
+      if(saved) document.getElementById('gen-server').value = saved;
+    }
+  });
+  langSel.addEventListener('change', toggleBuildOptions);
+  buildCb.addEventListener('change', toggleBuildOptions);
+  toggleBuildOptions();
+  loadTokens();
+})();
+</script>
+<script src="/static/xterm/xterm.umd.min.js"></script>
+<script src="/static/xterm/addon-fit.umd.min.js"></script>
+<script src="/static/xterm/addon-web-links.umd.min.js"></script>
+<script>
+(function(){
+  var form = document.getElementById('gen-form');
+  var buildModal = document.getElementById('build-modal');
+  if(!form || !buildModal) return;
+
+  var langSel = document.getElementById('gen-lang');
+  var targetSel = document.getElementById('gen-target');
+  var buildCb = document.getElementById('gen-build-cb');
+  var compiledLangs = ['go','csharp','rust','c','cpp','java'];
+  var term = null;
+  var fitAddon = null;
+  var pill = document.getElementById('build-min-pill');
+  var pillText = document.getElementById('build-min-text');
+  var pillDot = document.getElementById('build-min-dot');
+  var pillRestore = document.getElementById('build-min-restore');
+
+  function writeLine(s){ if(term) term.write('\r\n' + s); }
+  function delay(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function fitTerm(){ if(fitAddon){ try{ fitAddon.fit(); }catch(e){} } }
+  function setStatus(msg, cls){
+    var el = document.getElementById('build-modal-status');
+    el.textContent = msg;
+    el.className = 'ml-auto text-xs font-mono ' + (cls || 'text-muted');
+  }
+  // Progress blob pinned next to the "Build Agent" button: live during the
+  // build, then holds the final ok/failed state. It doubles as the minimized
+  // form of the popup, with a "restore" button to reopen the terminal.
+  function showPill(text, dotCls){
+    if(!pill) return;
+    pill.style.display = 'flex';
+    if(pillText) pillText.textContent = text;
+    if(pillDot) pillDot.className = 'w-2 h-2 rounded-full ' + (dotCls || 'bg-accent animate-pulse');
+  }
+  function hidePill(){ if(pill) pill.style.display = 'none'; }
+  function openBuildModal(){
+    buildModal.style.display = 'none';
+    void buildModal.offsetWidth;
+    buildModal.style.display = '';
+    setTimeout(fitTerm, 60);
+  }
+
+  form.addEventListener('submit', async function(e){
+    var wantsBuild = buildCb.checked && compiledLangs.indexOf(langSel.value) >= 0;
+    if(!wantsBuild) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    var termDiv = document.getElementById('build-terminal');
+    if(term){ try{ term.dispose(); }catch(err){} term = null; fitAddon = null; }
+    termDiv.innerHTML = '';
+    term = new Terminal({
+      theme: {
+        background: '#000000', foreground: '#d4e8d9', cursor: '#00ff41',
+        cursorAccent: '#000000', selectionBackground: 'rgba(0,255,65,0.25)',
+        selectionForeground: '#ffffff', black: '#0a0a0a', red: '#ff3333',
+        green: '#00ff41', yellow: '#ccff00', blue: '#00ccff', magenta: '#cc00ff',
+        cyan: '#00ccff', white: '#d4e8d9', brightBlack: '#4a6a52',
+        brightRed: '#ff6666', brightGreen: '#33ff66', brightYellow: '#ddff33',
+        brightBlue: '#33ddff', brightMagenta: '#dd33ff', brightCyan: '#33ddff',
+        brightWhite: '#ffffff',
+      },
+      fontFamily: 'JetBrains Mono, Cascadia Code, Consolas, monospace',
+      fontSize: 13,
+      cursorBlink: false,
+      scrollback: 5000,
+      allowProposedApi: true,
+      convertEol: true,
+    });
+    fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    try{ term.loadAddon(new WebLinksAddon.WebLinksAddon()); }catch(err){}
+    term.open(termDiv);
+    requestAnimationFrame(fitTerm);
+
+    var extVal = (document.getElementById('gen-ext') || {}).value || '';
+    document.getElementById('build-modal-title').textContent =
+      langSel.value + ' \u00b7 ' + targetSel.value + (extVal ? ' \u00b7 ' + extVal : '');
+    document.getElementById('build-modal-result').textContent = '';
+    document.getElementById('build-modal-msg').textContent = '';
+    document.getElementById('build-modal-elapsed').textContent = '0.0s';
+    setStatus('starting');
+    showPill('building ' + langSel.value + ' \u2192 ' + targetSel.value + ' \u00b7 0.0s');
+    openBuildModal();
+
+    var started = Date.now();
+    var lastCount = 0;
+    var lastWritten = '';
+
+    try {
+      var resp = await fetch('/api/build/start', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({language: langSel.value, target: targetSel.value})
+      });
+      if(!resp.ok){
+        var derr = await resp.json().catch(function(){ return {}; });
+        writeLine('\x1b[31m' + (derr.detail || ('HTTP ' + resp.status)) + '\x1b[0m');
+        setStatus('failed', 'text-red-400');
+        return;
+      }
+      var data = await resp.json();
+      writeLine('\x1b[1m' + data.language + ' \u2192 ' + data.target + '\x1b[0m');
+      writeLine('');
+      setStatus('building\u2026', 'text-accent');
+
+      var done = false, success = false, message = '';
+      while(!done){
+        await delay(400);
+        var secs = ((Date.now() - started) / 1000).toFixed(1);
+        var el = document.getElementById('build-modal-elapsed');
+        if(el) el.textContent = secs + 's';
+        showPill('building ' + langSel.value + ' \u2192 ' + targetSel.value + ' \u00b7 ' + secs + 's');
+        var j;
+        try {
+          var r = await fetch('/api/build/log/' + encodeURIComponent(data.job_id));
+          if(!r.ok) throw new Error('HTTP ' + r.status);
+          j = await r.json();
+        } catch(err){
+          writeLine('\x1b[31mpoll error: ' + err.message + '\x1b[0m');
+          done = true; success = false; message = 'log error';
+          break;
+        }
+        var lines = j.lines || [];
+        for(var i=lastCount; i<lines.length; i++){
+          if(lines[i] === '' && lastWritten === '') continue;
+          term.write(lines[i] + '\r\n');
+          lastWritten = lines[i];
+        }
+        lastCount = lines.length;
+        if(j.done){ done = true; success = !!j.success; message = j.message || ''; }
+      }
+
+      if(done){
+        var el2 = document.getElementById('build-modal-elapsed');
+        if(el2) el2.textContent = ((Date.now() - started) / 1000).toFixed(1) + 's';
+        var msgEl = document.getElementById('build-modal-msg');
+        var resEl = document.getElementById('build-modal-result');
+        if(success){
+          setStatus('done \u2713', 'text-green-400');
+          if(msgEl) msgEl.textContent = message;
+          if(resEl){ resEl.textContent = '\u2713 build ok'; resEl.className = 'font-mono text-[10px] text-green-400'; }
+          showPill('ok \u2713 ' + message, 'bg-green-400');
+          await delay(900);
+          form.submit();
+        } else {
+          setStatus('failed', 'text-red-400');
+          if(msgEl) msgEl.textContent = message;
+          if(resEl){ resEl.textContent = 'failed'; resEl.className = 'font-mono text-[10px] text-red-400'; }
+          showPill('build failed \u2192 ' + langSel.value + ' ' + targetSel.value, 'bg-red-400');
+          // Persisted log is written right after the terminal reports done, so
+          // refresh the Build Log table (no manual refresh needed).
+          if(window.loadBuildHistory){ setTimeout(window.loadBuildHistory, 500); }
+        }
+      }
+    } catch(err){
+      writeLine('\x1b[31m' + String(err && err.message || err) + '\x1b[0m');
+      setStatus('failed', 'text-red-400');
+      if(window.loadBuildHistory){ setTimeout(window.loadBuildHistory, 500); }
+    }
+  });
+
+  document.getElementById('build-modal-close').addEventListener('click', function(){
+    buildModal.style.display = 'none';
+  });
+  document.getElementById('build-modal-bd').addEventListener('click', function(){
+    buildModal.style.display = 'none';
+  });
+  if(pillRestore) pillRestore.addEventListener('click', openBuildModal);
+  window.addEventListener('resize', fitTerm);
+})();
+</script>
+<script>
+(function(){
+  var body = document.getElementById('build-history-body');
+  if(!body) return;
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function load(){
+    fetch('/api/build/history').then(function(r){
+      return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+    }).then(function(d){
+      var rows = d.builds || [];
+      if(!rows.length){
+        body.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-muted">no builds yet — run a server build to see it here.</td></tr>';
+        return;
+      }
+      var html = '';
+      rows.forEach(function(b){
+        var ok = !!b.ok;
+        var st = ok ? '<span class="text-green-400">ok</span>' : '<span class="text-red-400">failed</span>';
+        html += '<tr class="border-b border-dark-700">'
+          + '<td class="px-3 py-2 text-muted whitespace-nowrap">' + esc(b.ts) + '</td>'
+          + '<td class="px-3 py-2 text-gray-200">' + esc(b.language) + ' \u2192 ' + esc(b.target) + '</td>'
+          + '<td class="px-3 py-2">' + st + '</td>'
+          + '<td class="px-3 py-2 text-muted truncate max-w-[200px]">' + esc(b.message) + '</td>'
+          + '<td class="px-3 py-2 text-right"><button type="button" class="bld-detail px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer" data-id="' + esc(b.job_id) + '">log</button></td></tr>'
+          + '<tr class="bld-log hidden border-b border-dark-700"><td colspan="5" class="px-3 py-2"><pre class="max-h-56 overflow-auto whitespace-pre-wrap text-green-400/80 font-mono text-[11px]"></pre></td></tr>';
+      });
+      body.innerHTML = html;
+    }).catch(function(){
+      body.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-muted">failed to load build history.</td></tr>';
+    });
+  }
+  body.addEventListener('click', function(e){
+    var btn = e.target.closest('button.bld-detail');
+    if(!btn) return;
+    var row = btn.closest('tr').nextElementSibling;
+    var pre = row.querySelector('pre');
+    if(!row.classList.contains('hidden')){ row.classList.add('hidden'); return; }
+    row.classList.remove('hidden');
+    pre.textContent = 'loading\u2026';
+    fetch('/api/build/logfile/' + encodeURIComponent(btn.getAttribute('data-id')))
+      .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
+      .then(function(t){ pre.textContent = t; })
+      .catch(function(){ pre.textContent = 'log not found'; });
+  });
+  document.getElementById('build-log-refresh').addEventListener('click', load);
+  document.getElementById('build-log-clear').addEventListener('click', function(){
+    if(!confirm('Clear all persisted build logs and history?')) return;
+    fetch('/api/build/log', {method:'DELETE', headers:{'X-CSRF-Token': CSRF_TOKEN}})
+      .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+      .then(function(){ load(); })
+      .catch(function(){ alert('failed to clear build log'); });
+  });
+  window.loadBuildHistory = load;
+  load();
+})();
+</script>
+{% endblock %}

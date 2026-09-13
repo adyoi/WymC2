@@ -1,0 +1,580 @@
+﻿{% extends "base.html" %}
+{% block title %}Explorer - Wym C2{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-accent mb-4">Explorer</h1>
+
+<link rel="stylesheet" href="/static/codemirror/codemirror.min.css">
+<link rel="stylesheet" href="/static/codemirror/theme/monokai.min.css?v=2">
+<link rel="stylesheet" href="/static/codemirror/theme/monokai-overrides.css?v=1">
+<link rel="stylesheet" href="/static/codemirror/addon/selection/active-line.css">
+
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
+  <!-- Path bar -->
+  <div class="flex items-center gap-2 px-4 py-2.5 bg-dark-700 border-b border-dark-400 overflow-x-auto whitespace-nowrap">
+    <label class="flex items-center gap-1 flex-shrink-0 text-xs text-muted">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h5l2 2h7a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"/></svg>
+      <select id="drive-select" class="bg-dark-800 border border-dark-400 rounded px-1.5 py-0.5 text-xs font-mono text-accent focus:border-accent outline-none cursor-pointer">
+        {% for d in drives %}
+          <option value="{{ d.path }}" {% if cwd.startswith(d.path) %}selected{% endif %}>{{ d.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <span class="h-4 w-px bg-dark-400 flex-shrink-0"></span>
+    {% for crumb in breadcrumbs %}
+      <span class="text-muted text-xs flex-shrink-0">/</span>
+      <a href="/explorer?path={{ crumb.path | urlencode }}" class="text-xs font-mono text-muted hover:text-accent transition flex-shrink-0">{{ crumb.label }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- Toolbar -->
+  <div class="flex items-center gap-2 px-4 py-2 border-b border-dark-400 flex-wrap">
+    <input type="text" id="explorer-filter" placeholder="Filter..."
+      class="w-48 bg-dark-800 border border-dark-400 rounded px-2 py-1 text-xs font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+    <div class="h-4 w-px bg-dark-400"></div>
+    <button id="btn-new-file" class="tb-btn" title="New file">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <span>New File</span>
+    </button>
+    <button id="btn-new-dir" class="tb-btn" title="New folder">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      <span>New Folder</span>
+    </button>
+    <label class="tb-btn cursor-pointer">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+      <span>Upload</span>
+      <input type="file" id="file-upload" class="hidden">
+    </label>
+    <div class="h-4 w-px bg-dark-400"></div>
+    <button id="btn-chmod" class="tb-btn" title="Set permissions" disabled>
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+      <span>chmod</span>
+    </button>
+    <button id="btn-chown" class="tb-btn" title="Set owner" disabled>
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+      <span>chown</span>
+    </button>
+    <button id="btn-delete" class="tb-btn text-red-400" title="Delete selected" disabled>
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      <span>Delete</span>
+    </button>
+    <span class="ml-auto text-xs text-muted" id="sel-count"></span>
+  </div>
+
+  <!-- File table -->
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-muted text-xs uppercase border-b border-dark-400">
+        <th class="w-10 px-3 py-2"><input type="checkbox" id="select-all" class="accent-[#00ff41]"></th>
+        <th class="w-8 px-2 py-2"></th>
+        <th class="text-left px-3 py-2">Name</th>
+        <th class="text-right px-3 py-2">Size</th>
+        <th class="text-left px-3 py-2">chmod</th>
+        <th class="text-left px-3 py-2">Owner</th>
+        <th class="text-left px-3 py-2">Group</th>
+        <th class="text-left px-3 py-2">Modified</th>
+        <th class="text-left px-3 py-2">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="explorer-tbody">
+      {% if parent %}
+      <tr class="border-b border-dark-400/50 hover:bg-dark-500/50 transition row-item" data-name=".." data-path="{{ parent }}">
+        <td class="px-3 py-2"></td>
+        <td class="px-2 py-2 text-center">
+          <svg class="w-4 h-4 text-muted inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg>
+        </td>
+        <td class="px-3 py-2"><a href="/explorer?path={{ parent | urlencode }}" class="text-accent font-mono text-sm hover:underline">..</a></td>
+        <td class="px-3 py-2 text-right text-xs text-muted font-mono"></td>
+        <td class="px-3 py-2 text-xs font-mono text-muted"></td>
+        <td class="px-3 py-2 text-xs text-muted"></td>
+        <td class="px-3 py-2 text-xs text-muted"></td>
+        <td class="px-3 py-2 text-xs text-muted"></td>
+        <td class="px-3 py-2 text-xs text-muted"></td>
+      </tr>
+      {% endif %}
+      {% for e in entries %}
+      <tr class="border-b border-dark-400/50 hover:bg-dark-500/50 transition row-item" data-name="{{ e.name | lower }}" data-path="{{ e.path | replace('\\', '\\\\') }}" data-isdir="{{ '1' if e.is_dir else '0' }}">
+        <td class="px-3 py-2"><input type="checkbox" class="row-cb accent-[#00ff41]" data-idx="{{ loop.index0 }}"></td>
+        <td class="px-2 py-2 text-center">
+          {% if e.is_dir %}
+            <svg class="w-4 h-4 text-accent inline" fill="currentColor" viewBox="0 0 24 24"><path d="M2 6a2 2 0 012-2h5l2 2h9a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+          {% else %}
+            <svg class="w-4 h-4 text-muted inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          {% endif %}
+        </td>
+        <td class="px-3 py-2">
+          {% if e.is_dir %}
+            <a href="/explorer?path={{ e.path | urlencode }}" class="text-accent font-mono text-sm hover:underline">{{ e.name }}</a>
+          {% else %}
+            <span class="font-mono text-sm text-gray-300">{{ e.name }}</span>
+          {% endif %}
+        </td>
+        <td class="px-3 py-2 text-right text-xs text-muted font-mono">
+          {% if not e.is_dir %}
+            {% if e.size > 1048576 %}{{ "%.1f"|format(e.size / 1048576) }} MB
+            {% elif e.size > 1024 %}{{ "%.1f"|format(e.size / 1024) }} KB
+            {% else %}{{ e.size }} B{% endif %}
+          {% endif %}
+        </td>
+        <td class="px-3 py-2 text-xs font-mono text-muted">{{ e.mode | default('---') }}</td>
+        <td class="px-3 py-2 text-xs text-muted">{{ e.owner | default('') }}</td>
+        <td class="px-3 py-2 text-xs text-muted">{{ e.group | default('') }}</td>
+        <td class="px-3 py-2 text-xs text-muted">{{ e.mtime }}</td>
+        <td class="px-3 py-2">
+          <div class="flex items-center gap-1.5">
+            {% if not e.is_dir %}
+              <button class="act-btn act-edit" data-name="{{ e.name }}" data-path="{{ e.path | replace('\\', '\\\\') }}" title="Edit" type="button">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+            {% endif %}
+            <button class="act-btn act-rename" data-name="{{ e.name }}" data-path="{{ e.path | replace('\\', '\\\\') }}" title="Rename" type="button">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button class="act-btn act-download" data-name="{{ e.name }}" data-path="{{ e.path | replace('\\', '\\\\') }}" data-isdir="{{ '1' if e.is_dir else '0' }}" title="{{ 'Download (gzip)' if e.is_dir else 'Download' }}" type="button">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 12m4 4V4"/></svg>
+            </button>
+            <button class="act-btn act-delete text-red-400" data-name="{{ e.name }}" data-path="{{ e.path | replace('\\', '\\\\') }}" data-isdir="{{ '1' if e.is_dir else '0' }}" title="Delete" type="button">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- File viewer -->
+<div id="file-viewer" class="fixed inset-0 z-50" style="display:none">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="fv-backdrop"></div>
+  <div class="relative flex flex-col max-w-4xl mx-auto mt-16 bg-dark-600 border border-dark-400 rounded-xl shadow-2xl overflow-hidden" style="height: 78vh;">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-dark-400 bg-dark-700 flex-shrink-0">
+      <span class="font-mono text-sm text-accent truncate min-w-0" id="fv-title"></span>
+      <div class="flex items-center gap-2 ml-auto flex-shrink-0">
+        <button id="fv-save" class="hidden px-3 py-1 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">Save</button>
+        <button id="fv-close" class="text-muted hover:text-accent transition p-1 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="fv-content" spellcheck="false" class="flex-1 overflow-hidden font-mono text-xs bg-dark-900 outline-none" style="min-height:0;"></div>
+    <div id="fv-status" class="flex items-baseline gap-4 px-4 py-1.5 border-t border-dark-400 bg-dark-700 text-[10px] font-mono text-muted flex-shrink-0">
+      <span id="fv-pos">Ln 1, Col 1</span>
+      <span id="fv-lines"></span>
+      <span id="fv-mode" class="uppercase"></span>
+      <span id="fv-editable" class="ml-auto uppercase text-accent">Edit mode</span>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog (chmod/chown/new) -->
+<div id="dialog" class="fixed inset-0 z-50" style="display:none">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="dlg-backdrop"></div>
+  <div class="relative max-w-sm mx-auto mt-32 bg-dark-600 border border-dark-400 rounded-xl shadow-2xl p-6">
+    <h3 class="text-sm font-bold text-accent uppercase tracking-wider mb-4" id="dlg-title"></h3>
+    <input type="text" id="dlg-input" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none mb-4" autocomplete="off">
+    <div id="dlg-chown-fields" style="display:none" class="mb-4">
+      <label class="block text-xs text-muted mb-1">User (owner)</label>
+      <select id="dlg-user" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none mb-3"></select>
+      <label class="block text-xs text-muted mb-1">Group</label>
+      <select id="dlg-group" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none"></select>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button id="dlg-cancel" class="px-4 py-1.5 text-xs font-mono border border-dark-400 text-muted rounded-lg hover:text-gray-200 transition cursor-pointer">Cancel</button>
+      <button id="dlg-ok" class="px-4 py-1.5 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">OK</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .tb-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 8px; font-size: 11px; font-family: var(--mono, monospace);
+    border: 1px solid #1a2e1f; border-radius: 6px; color: #7a9a82;
+    background: transparent; cursor: pointer; transition: all 0.15s;
+  }
+  .tb-btn:hover:not(:disabled) { background: rgba(0,255,65,0.08); color: #00ff41; border-color: rgba(0,255,65,0.3); }
+  .tb-btn:disabled { opacity: 0.3; cursor: default; }
+  .act-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; padding: 0;
+    border: 1px solid #1a2e1f; border-radius: 5px; color: #7a9a82;
+    background: transparent; cursor: pointer; transition: all 0.15s;
+  }
+  .act-btn:hover { background: rgba(0,255,65,0.1); color: #00ff41; border-color: rgba(0,255,65,0.3); }
+  .act-btn.text-red-400:hover { background: rgba(255,0,0,0.12); color: #ff6b6b; border-color: rgba(255,80,80,0.35); }
+
+  /* File viewer editor */
+  #fv-content .CodeMirror {
+    height: 100%;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  #fv-content .CodeMirror-scroll {
+    height: 100%;
+  }
+  #fv-content .CodeMirror-gutters {
+    border-right: 1px solid rgba(0,255,65,0.08);
+  }
+  #fv-content .CodeMirror-cursor {
+    border-left-width: 2px;
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/codemirror/codemirror.min.js"></script>
+<script src="/static/codemirror/addon/mode/simple.min.js"></script>
+<script src="/static/codemirror/mode/xml/xml.min.js"></script>
+<script src="/static/codemirror/mode/javascript/javascript.min.js"></script>
+<script src="/static/codemirror/mode/css/css.min.js"></script>
+<script src="/static/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="/static/codemirror/mode/python/python.min.js"></script>
+<script src="/static/codemirror/mode/shell/shell.min.js"></script>
+<script src="/static/codemirror/mode/clike/clike.min.js"></script>
+<script src="/static/codemirror/mode/markdown/markdown.min.js"></script>
+<script src="/static/codemirror/mode/go/go.min.js"></script>
+<script src="/static/codemirror/mode/rust/rust.min.js"></script>
+<script src="/static/codemirror/mode/php/php.min.js"></script>
+<script src="/static/codemirror/mode/perl/perl.min.js"></script>
+<script src="/static/codemirror/mode/ruby/ruby.min.js"></script>
+<script src="/static/codemirror/mode/lua/lua.min.js"></script>
+<script src="/static/codemirror/mode/powershell/powershell.min.js"></script>
+<script src="/static/codemirror/addon/edit/matchbrackets.min.js"></script>
+<script src="/static/codemirror/addon/edit/closebrackets.min.js"></script>
+<script src="/static/codemirror/addon/selection/active-line.min.js"></script>
+<script src="/static/codemirror/addon/display/placeholder.min.js"></script>
+<script>
+(function(){
+  var CWD = {{ cwd | tojson }};
+  var IS_WINDOWS = {{ 'true' if is_windows else 'false' }};
+  var tbody = document.getElementById('explorer-tbody');
+  var filter = document.getElementById('explorer-filter');
+  var selectAllCb = document.getElementById('select-all');
+  var selCount = document.getElementById('sel-count');
+  var btnChmod = document.getElementById('btn-chmod');
+  var btnChown = document.getElementById('btn-chown');
+  var btnDelete = document.getElementById('btn-delete');
+
+  // Filter
+  filter.addEventListener('input', function(){
+    var q = this.value.toLowerCase();
+    tbody.querySelectorAll('.row-item').forEach(function(r){
+      r.style.display = r.dataset.name.indexOf(q) >= 0 ? '' : 'none';
+    });
+  });
+
+  // Selection
+  function getChecked(){
+    return Array.from(tbody.querySelectorAll('.row-cb:checked')).map(function(cb){
+      var row = cb.closest('.row-item');
+      return { path: row.dataset.path, name: row.dataset.name, isDir: row.dataset.isdir === '1' };
+    });
+  }
+  function updateUI(){
+    var sel = getChecked();
+    selCount.textContent = sel.length ? sel.length + ' selected' : '';
+    btnChmod.disabled = IS_WINDOWS || sel.length !== 1;
+    btnChown.disabled = IS_WINDOWS || sel.length !== 1;
+    btnDelete.disabled = sel.length === 0;
+  }
+  tbody.addEventListener('change', function(e){
+    if(e.target.classList.contains('row-cb')) updateUI();
+  });
+  selectAllCb.addEventListener('change', function(){
+    tbody.querySelectorAll('.row-cb').forEach(function(cb){ cb.checked = selectAllCb.checked; });
+    updateUI();
+  });
+
+  // View file (double-click) - edit popup using CodeMirror
+  var cm = null;
+  function guessMode(name){
+    var n = (name || '').toLowerCase();
+    var ext = n.split('.').pop();
+    var m = {
+      js:'javascript', mjs:'javascript', cjs:'javascript', ts:'javascript',
+      json:'application/json', py:'python',
+      sh:'shell', bash:'shell', zsh:'shell', fish:'shell',
+      html:'htmlmixed', htm:'htmlmixed', vue:'htmlmixed',
+      xml:'xml', svg:'xml', xhtml:'xml',
+      css:'css',
+      md:'markdown', markdown:'markdown',
+      c:'text/x-csrc', h:'text/x-csrc', cpp:'text/x-c++src', cc:'text/x-c++src',
+      cxx:'text/x-c++src', hpp:'text/x-c++src', java:'text/x-java', cs:'text/x-csharp',
+      go:'go', rs:'rust', php:'php', pl:'perl', pm:'perl', rb:'ruby', lua:'lua',
+      ps1:'powershell', psm1:'powershell', psd1:'powershell',
+    }[ext];
+    if(!m){
+      if(n.indexOf('.html') >= 0 || n.indexOf('.vue') >= 0) m = 'htmlmixed';
+      else if(n.indexOf('.json') >= 0) m = 'application/json';
+      else m = 'text/plain';
+    }
+    return m;
+  }
+  function updateStatus(){
+    if(!cm) return;
+    var cur = cm.getCursor();
+    document.getElementById('fv-pos').textContent = 'Ln ' + (cur.line + 1) + ', Col ' + (cur.ch + 1);
+    document.getElementById('fv-lines').textContent = cm.lineCount() + ' lines';
+    try { document.getElementById('fv-mode').textContent = cm.getMode().name; } catch(e) {}
+    var ro = !!cm.getOption('readOnly');
+    var el = document.getElementById('fv-editable');
+    el.textContent = ro ? 'Read-only' : 'Edit mode';
+    el.className = 'ml-auto uppercase ' + (ro ? 'text-muted' : 'text-accent');
+  }
+  function openViewer(name, size, content, editable){
+    document.getElementById('fv-title').textContent = name + ' (' + size + ' bytes)';
+    var host = document.getElementById('fv-content');
+    if(!cm){
+      cm = CodeMirror(host, {
+        value: '',
+        lineNumbers: true,
+        lineWrapping: true,
+        readOnly: true,
+        theme: 'monokai',
+        mode: 'text/plain',
+        tabSize: 2,
+        indentUnit: 2,
+        matchBrackets: true,
+        autoCloseBrackets: true,
+        styleActiveLine: true,
+        placeholder: '// empty file',
+      });
+      cm.on('cursorActivity', updateStatus);
+      cm.on('change', updateStatus);
+    }
+    cm.getDoc().setValue(content || '');
+    cm.setOption('readOnly', editable ? false : true);
+    try { cm.setOption('mode', guessMode(name)); } catch(e) {}
+    if(editable) cm.focus();
+    document.getElementById('fv-save').classList.toggle('hidden', !editable);
+    document.getElementById('file-viewer').style.display = '';
+    setTimeout(function(){ cm.refresh(); updateStatus(); }, 0);
+  }
+  var currentEditPath = null;
+  document.getElementById('fv-save').onclick = function(){
+    if(!currentEditPath) return;
+    var content = cm ? cm.getDoc().getValue() : '';
+    fetch('/api/explorer/edit', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+      body: JSON.stringify({ path: currentEditPath, content: content }),
+    }).then(function(r){ return r.ok ? r.json() : r.json().then(function(d){ throw new Error(d.detail || 'save failed'); }); })
+      .then(function(){ alert('Saved'); document.getElementById('file-viewer').style.display = 'none'; location.reload(); })
+      .catch(function(e){ alert(e.message); });
+  };
+  tbody.addEventListener('dblclick', function(e){
+    var row = e.target.closest('.row-item');
+    if(!row || row.dataset.isdir === '1') return;
+    if(e.target.closest('.act-btn')) return;
+    var path = row.dataset.path;
+    fetch('/api/explorer/file?path=' + encodeURIComponent(path))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.detail){ alert(d.detail); return; }
+        currentEditPath = null;
+        openViewer(d.name, d.size, d.content, false);
+      });
+  });
+  document.getElementById('fv-close').addEventListener('click', function(){ document.getElementById('file-viewer').style.display = 'none'; });
+  document.getElementById('fv-backdrop').addEventListener('click', function(){ document.getElementById('file-viewer').style.display = 'none'; });
+  document.addEventListener('keydown', function(e){
+    if(document.getElementById('file-viewer').style.display === 'none') return;
+    if(e.key === 'Escape'){ document.getElementById('file-viewer').style.display = 'none'; }
+    if((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')){
+      e.preventDefault();
+      if(currentEditPath) document.getElementById('fv-save').click();
+    }
+  });
+
+  // Dialog helper
+  function showDialog(title, placeholder, callback){
+    document.getElementById('dlg-title').textContent = title;
+    var inp = document.getElementById('dlg-input');
+    inp.value = '';
+    inp.placeholder = placeholder;
+    inp.style.display = '';
+    document.getElementById('dlg-chown-fields').style.display = 'none';
+    document.getElementById('dialog').style.display = '';
+    inp.focus();
+    var okBtn = document.getElementById('dlg-ok');
+    var cancelBtn = document.getElementById('dlg-cancel');
+    var backdrop = document.getElementById('dlg-backdrop');
+    function close(){ document.getElementById('dialog').style.display = 'none'; okBtn.onclick = null; cancelBtn.onclick = null; backdrop.onclick = null; }
+    okBtn.onclick = function(){ close(); callback(inp.value); };
+    cancelBtn.onclick = close;
+    backdrop.onclick = close;
+    inp.onkeydown = function(e){ if(e.key === 'Enter') okBtn.click(); if(e.key === 'Escape') cancelBtn.click(); };
+  }
+
+  // Chown dialog with user + group dropdowns (Unix)
+  function showChownDialog(title, callback){
+    loadUserGroups().then(function(){
+      document.getElementById('dlg-title').textContent = title;
+      var inp = document.getElementById('dlg-input');
+      inp.style.display = 'none';
+      document.getElementById('dlg-chown-fields').style.display = '';
+      document.getElementById('dialog').style.display = '';
+      var okBtn = document.getElementById('dlg-ok');
+      var cancelBtn = document.getElementById('dlg-cancel');
+      var backdrop = document.getElementById('dlg-backdrop');
+      function close(){ document.getElementById('dialog').style.display = 'none'; okBtn.onclick = null; cancelBtn.onclick = null; backdrop.onclick = null; }
+      okBtn.onclick = function(){
+        close();
+        callback({ user: document.getElementById('dlg-user').value, group: document.getElementById('dlg-group').value });
+      };
+      cancelBtn.onclick = close;
+      backdrop.onclick = close;
+    });
+  }
+  function loadUserGroups(){
+    return fetch('/api/explorer/users-groups')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var u = document.getElementById('dlg-user');
+        var g = document.getElementById('dlg-group');
+        u.innerHTML = ''; g.innerHTML = '';
+        (d.users || []).forEach(function(n){ var o = document.createElement('option'); o.value = n; o.textContent = n; u.appendChild(o); });
+        (d.groups || []).forEach(function(n){ var o = document.createElement('option'); o.value = n; o.textContent = n; g.appendChild(o); });
+      })
+      .catch(function(){});
+  }
+
+  // New file
+  document.getElementById('btn-new-file').addEventListener('click', function(){
+    showDialog('New File', 'filename.txt', function(name){
+      if(!name) return;
+      fetch('/api/explorer/upload', {
+        method: 'POST',
+        headers: {'X-CSRF-Token': CSRF_TOKEN},
+        body: (function(){ var fd = new FormData(); fd.append('file', new File([''], name, {type:'text/plain'})); fd.append('destination', CWD); return fd; })(),
+      }).then(function(){ location.reload(); });
+    });
+  });
+
+  // New folder
+  document.getElementById('btn-new-dir').addEventListener('click', function(){
+    showDialog('New Folder', 'folder-name', function(name){
+      if(!name) return;
+      fetch('/api/explorer/mkdir', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({ name: name, parentPath: CWD }),
+      }).then(function(){ location.reload(); });
+    });
+  });
+
+  // Upload
+  document.getElementById('file-upload').addEventListener('change', function(){
+    var file = this.files[0];
+    if(!file) return;
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('destination', CWD);
+    fetch('/api/explorer/upload', { method: 'POST', headers: {'X-CSRF-Token': CSRF_TOKEN}, body: fd })
+      .then(function(){ location.reload(); });
+  });
+
+  // chmod
+  btnChmod.addEventListener('click', function(){
+    var sel = getChecked();
+    if(sel.length !== 1) return;
+    showDialog('chmod - ' + sel[0].name, 'e.g. 755 or 0644', function(mode){
+      if(!mode) return;
+      fetch('/api/explorer/chmod', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({ path: sel[0].path, mode: mode }),
+      }).then(function(){ location.reload(); });
+    });
+  });
+
+  // chown (owner + group, Unix)
+  btnChown.addEventListener('click', function(){
+    var sel = getChecked();
+    if(sel.length !== 1) return;
+    showChownDialog('chown - ' + sel[0].name, function(v){
+      if(!v) return;
+      fetch('/api/explorer/chown', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({ path: sel[0].path, owner: v.user, group: v.group }),
+      }).then(function(r){
+        if(!r.ok) return r.json().then(function(d){ alert(d.detail || 'error'); });
+        location.reload();
+      });
+    });
+  });
+
+  // Delete (bulk)
+  btnDelete.addEventListener('click', function(){
+    var sel = getChecked();
+    if(!sel.length) return;
+    if(!confirm('Delete ' + sel.length + ' item(s)?')) return;
+    Promise.all(sel.map(function(item){
+      return fetch('/api/explorer/delete', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({ name: item.name, path: CWD }),
+      });
+    })).then(function(){ location.reload(); });
+  });
+
+  // ---- Per-row action buttons ----
+  // Edit
+  tbody.addEventListener('click', function(e){
+    var btn = e.target.closest('.act-edit');
+    if(!btn) return;
+    e.stopPropagation();
+    fetch('/api/explorer/file?path=' + encodeURIComponent(btn.dataset.path))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.detail){ alert(d.detail); return; }
+        currentEditPath = btn.dataset.path;
+        openViewer(d.name, d.size, d.content, true);
+      });
+  });
+
+  // Rename
+  tbody.addEventListener('click', function(e){
+    var btn = e.target.closest('.act-rename');
+    if(!btn) return;
+    e.stopPropagation();
+    showDialog('Rename - ' + btn.dataset.name, 'new name', function(newname){
+      if(!newname || newname === btn.dataset.name) return;
+      fetch('/api/explorer/rename', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({ oldName: btn.dataset.name, newName: newname, path: CWD }),
+      }).then(function(r){
+        if(!r.ok) return r.json().then(function(d){ alert(d.detail || 'error'); });
+        location.reload();
+      });
+    });
+  });
+
+  // Download (file, or gzip archive for directories)
+  tbody.addEventListener('click', function(e){
+    var btn = e.target.closest('.act-download');
+    if(!btn) return;
+    e.stopPropagation();
+    window.location = '/api/explorer/download?path=' + encodeURIComponent(btn.dataset.path);
+  });
+
+  // Delete (single, popup confirm)
+  tbody.addEventListener('click', function(e){
+    var btn = e.target.closest('.act-delete');
+    if(!btn) return;
+    e.stopPropagation();
+    if(!confirm('Delete "' + btn.dataset.name + '"' + (btn.dataset.isdir === '1' ? ' (folder and all contents)' : '') + '?')) return;
+    fetch('/api/explorer/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+      body: JSON.stringify({ name: btn.dataset.name, path: CWD }),
+    }).then(function(r){
+      if(!r.ok) return r.json().then(function(d){ alert(d.detail || 'error'); });
+      location.reload();
+    });
+  });
+
+  // Drive selector
+  document.getElementById('drive-select').addEventListener('change', function(){
+    var v = this.value;
+    if(!v) return;
+    window.location = '/explorer?path=' + encodeURIComponent(v);
+  });
+})();
+</script>
+{% endblock %}

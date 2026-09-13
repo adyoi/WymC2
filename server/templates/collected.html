@@ -1,0 +1,40 @@
+﻿{% extends "base.html" %}
+{% block title %}Collected Files - Wym C2{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-accent mb-2">Collected Files</h1>
+<p class="text-sm text-muted mb-4">
+  Files pulled from agents via <b>upload</b> tasks land here.
+  Format: <code class="text-accent text-xs">agent_id__task_id__filename</code>.
+</p>
+
+{% if files %}
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-x-auto">
+  <table class="w-full text-sm min-w-0">
+    <thead>
+      <tr class="text-muted text-xs uppercase bg-dark-700 border-b border-dark-400">
+        <th class="text-left px-4 py-2.5">Name</th>
+        <th class="text-right px-4 py-2.5">Size</th>
+        <th class="text-right px-4 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for name, size, mtime in files %}
+      <tr class="border-b border-dark-400/50 hover:bg-dark-500/50 transition">
+        <td class="px-4 py-2.5 min-w-0"><a href="/collected/{{ name }}" class="font-mono text-sm text-accent hover:underline break-all">{{ name }}</a></td>
+        <td class="px-4 py-2.5 text-right text-xs text-muted font-mono">{{ size }} B</td>
+        <td class="px-4 py-2.5 text-right">
+          <form method="post" action="/collected/delete" onsubmit="return confirm('Delete {{ name }}?')" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="name" value="{{ name }}">
+            <button class="px-2 py-1 text-[10px] font-mono border border-red-500/30 text-red-400 rounded hover:bg-red-500/10 transition cursor-pointer">delete</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm text-muted">no collected files yet - queue an <b>upload</b> task on an agent</p>
+{% endif %}
+{% endblock %}

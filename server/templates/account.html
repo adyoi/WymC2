@@ -1,0 +1,33 @@
+﻿{% extends "base.html" %}
+{% block title %}Account - Wym C2{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold mb-6 text-accent">Account Settings</h1>
+
+<div class="max-w-md bg-dark-600 border border-dark-400 rounded-xl p-8">
+  <h2 class="font-mono text-sm text-muted uppercase tracking-wider mb-4">Change Password</h2>
+  {% if error %}<div class="alert-error">{{ error }}</div>{% endif %}
+  {% if ok %}<div class="alert-ok">{{ ok }}</div>{% endif %}
+  <form method="post" action="/account" class="space-y-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div>
+      <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">Current Password</label>
+      <input type="password" name="current_password" autocomplete="current-password" required placeholder="********"
+        class="w-full bg-dark-800 border border-dark-400 rounded-lg px-4 py-2.5 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition">
+    </div>
+    <div>
+      <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">New Password</label>
+      <input type="password" name="new_password" autocomplete="new-password" required minlength="8" placeholder="********"
+        class="w-full bg-dark-800 border border-dark-400 rounded-lg px-4 py-2.5 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition">
+    </div>
+    <div>
+      <label class="block text-xs text-muted uppercase tracking-wider mb-1.5">Confirm New Password</label>
+      <input type="password" name="confirm_password" autocomplete="new-password" required placeholder="********"
+        class="w-full bg-dark-800 border border-dark-400 rounded-lg px-4 py-2.5 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition">
+    </div>
+    <button type="submit"
+      class="w-full bg-accent/10 border border-accent/30 text-accent font-mono font-bold text-sm uppercase tracking-wider py-3 rounded-lg hover:bg-accent/20 hover:border-accent/50 transition cursor-pointer">
+      Update Password
+    </button>
+  </form>
+</div>
+{% endblock %}
