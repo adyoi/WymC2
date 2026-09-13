@@ -1,0 +1,4 @@
+# Wym C2 - test/dev dependencies
+-r requirements.txt
+pytest>=8.0
+httpx>=0.27

@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  server-tests:
+    name: Server / pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+      - name: Run tests
+        run: pytest server/tests -q
+
+  script-agents:
+    name: Script agents (syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install interpreters
+        run: sudo apt-get update && sudo apt-get install -y php-cli ruby perl lua5.4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - name: Python
+        run: python -m py_compile clients/agent.py server/main.py server/database.py server/auth.py
+      - name: Node
+        run: node --check clients/agent.js
+      - name: Bash
+        run: bash -n clients/agent.sh clients/agent-service.sh
+      - name: PowerShell (parse via pwsh)
+        shell: pwsh
+        run: |
+          $errs = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path clients/agent.ps1), [ref]$tokens, [ref]$errs)
+          if ($errs) { $errs | ForEach-Object { Write-Error $_.Message }; exit 1 }
+      - name: Ruby
+        run: ruby -c clients/agent.rb
+      - name: Perl
+        run: perl -c clients/agent.pl
+      - name: PHP
+        run: php -l clients/agent.php
+      - name: Lua
+        run: luac -p clients/agent.lua
+      - name: Go build
+        run: go build -o /tmp/c2agent clients/agent.go
+
+  compiled-agents:
+    name: Compiled agents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Rust (cargo)
+        run: cargo build --release --manifest-path clients/Cargo.toml
+      - name: Install C toolchain + libcurl
+        run: sudo apt-get update && sudo apt-get install -y build-essential libcurl4-openssl-dev
+      - name: C
+        run: gcc -Wall -O2 -o /tmp/c2agent-c clients/agent.c -lcurl
+      - name: C++
+        run: g++ -Wall -O2 -o /tmp/c2agent-cpp clients/agent.cpp -lcurl
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Java (JDK, stdlib-only)
+        run: mkdir -p /tmp/j && javac -encoding UTF-8 -d /tmp/j clients/agent.java
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: C# (.NET)
+        run: |
+          mkdir -p /tmp/cs && cd /tmp/cs
+          dotnet new console -o app --force
+          cp "$GITHUB_WORKSPACE"/clients/agent.cs app/Program.cs
+          dotnet build app -o out -q

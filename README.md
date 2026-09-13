@@ -51,6 +51,13 @@ multiplayer client-server loops, remote sensor fleets and similar systems:
 - **Operational hygiene** — shared-token auth, config via flags *and* env vars,
   deterministic state paths, per-OS fallbacks. These are the boring details
   that make distributed systems runnable by operators rather than demos.
+- **One contract, 14 runtimes, 3 OS families** — implementing the same wire
+  protocol in Python, Node.js, Bash, PowerShell, PHP, Ruby, Perl, Lua, Go,
+  Rust, C, C++, C# and Java is a crash course in cross-platform engineering:
+  process/threading models, HTTP clients, shell quoting (`cmd`,
+  PowerShell, POSIX `sh`), path and line-ending quirks, and windowing/input
+  APIs on Windows vs Linux vs macOS. A spec survives porting only when it is
+  small and the defaults are boring.
 
 Swap the protocol and the payloads, keep the lifecycle: you have understood
 the core of any client-server control plane.
@@ -335,9 +342,9 @@ cd clients && go build -o agent agent.go
 dotnet new console -o a && copy clients\agent.cs a\Program.cs
 dotnet build a -o out && .\out\a.exe --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
 
-# Rust (build server-side, or locally)
-rustc -O agent.rs -o agent
-./agent --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
+# Rust (needs cargo; manifests in clients/Cargo.toml)
+cd clients && cargo build --release
+./target/release/c2agent --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
 
 # Java (JDK 11+; stdlib only — no dependencies)
 javac -encoding UTF-8 clients/agent.java -d out
