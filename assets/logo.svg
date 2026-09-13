@@ -12,15 +12,13 @@
       .tag  { font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace; fill: #7a9a82; letter-spacing: 4px; }
       .dot  { fill: #3f6a52; }
     </style>
-  </defs>
-
-  <rect class="bg" x="8" y="8" width="1184" height="304" rx="36"/>
-  <rect x="8" y="8" width="1184" height="304" rx="36" fill="url(#mesh)" opacity="0.05"/>
-  <defs>
     <pattern id="mesh" width="28" height="28" patternUnits="userSpaceOnUse">
       <circle cx="2" cy="2" r="1" fill="#00ff41" opacity="0.22"/>
     </pattern>
   </defs>
+
+  <rect class="bg" x="8" y="8" width="1184" height="304" rx="36"/>
+  <rect x="8" y="8" width="1184" height="304" rx="36" fill="url(#mesh)" opacity="0.05"/>
 
   <!-- hexagon grid frame -->
   <polygon class="hex" points="170,60 263,118 263,234 170,292 77,234 77,118"/>
@@ -43,12 +41,12 @@
   <circle class="acc" cx="196" cy="182" r="4"/>
   <circle class="acc" cx="180" cy="220" r="3"/>
 
-  <!-- wordmark -->
+  <!-- wordmark (backdrop painted first so text stays on top) -->
+  <rect x="322" y="56" width="352" height="190" rx="10" fill="#0d1a12" opacity="0.5"/>
   <text class="t1" x="330" y="150" font-size="88">WYM</text>
   <text class="t2" x="330" y="236" font-size="88">C2</text>
-  <rect x="322" y="132" width="352" height="120" rx="8" fill="#0d1a12" opacity="0.55"/>
 
   <!-- tagline -->
   <text class="tag" x="334" y="264" font-size="20">COMMAND &amp; CONTROL FRAMEWORK</text>
-  <text class="tag" x="334" y="292" font-size="15" letter-spacing="2px">14 CLIENT LANGUAGES  ·  HTTP/JSON  ·  WIN/LINUX/macOS</text>
+  <text class="tag" x="334" y="292" font-size="15" letter-spacing="2px">14 CLIENT LANGUAGES  &#183;  HTTP/JSON  &#183;  WIN/LINUX/macOS</text>
 </svg>

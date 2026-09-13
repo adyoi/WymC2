@@ -3,7 +3,7 @@
     <style>
       .bg     { fill: #0a0f0c; }
       .lhead  { fill: #101a14; stroke-width: 1.5px; }
-      .lser   { fill: #101a14; stroke: #00ff41; stroke-width: 1.5px; rx: 10px; }
+      .lser   { fill: #101a14; stroke: #00ff41; stroke-width: 1.5px; }
       .op     { stroke: #2a4a38; stroke-width: 1.5px; stroke-dasharray: 4 4; }
       .sg     { stroke: #00ff41; stroke-width: 2.5px; fill: none; }
       .sga    { stroke: #4ede7c; stroke-width: 2.5px; fill: none; }
@@ -16,12 +16,11 @@
       .tS     { fill: #3f6a52; }
     </style>
     <marker id="ag" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#00ff41"/></marker>
-    <marker id="ap" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#4ede7c"/></marker>
     <marker id="ad" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#3f6a52"/></marker>
   </defs>
 
   <rect class="bg" x="0" y="0" width="1200" height="880"/>
-  <text class="tM tS" x="30" y="40" font-size="15" letter-spacing="3px">AGENT &harr; SERVER LIFECYCLE</text>
+  <text class="tM tS" x="30" y="40" font-size="15" letter-spacing="3px">AGENT &#8596; SERVER LIFECYCLE</text>
 
   <!-- lifelines -->
   <line class="op" x1="210" y1="130" x2="210" y2="820"/>
@@ -31,7 +30,7 @@
   <!-- lane headers -->
   <rect class="lhead" x="135" y="54" width="150" height="52" rx="10" stroke="#3f6a52"/>
   <text class="tB tD" x="210" y="87" font-size="16" text-anchor="middle">OPERATOR</text>
-  <rect class="lser"  x="480" y="54" width="160" height="52"/>
+  <rect class="lser"  x="480" y="54" width="160" height="52" rx="10"/>
   <text class="tB" x="560" y="87" font-size="16" text-anchor="middle" fill="#00ff41">C2 SERVER</text>
   <rect class="lhead" x="855" y="54" width="150" height="52" rx="10" stroke="#4ede7c"/>
   <text class="tB" x="930" y="87" font-size="16" text-anchor="middle" fill="#4ede7c">AGENT</text>
@@ -40,7 +39,7 @@
   <line class="sg" x1="930" y1="170" x2="566" y2="170" marker-end="url(#ag)"/>
   <text class="tM tW" x="747" y="190" font-size="13" text-anchor="middle">POST /api/register {hostname, username, os, arch, pid, ip, type, version}</text>
   <line class="sd" x1="560" y1="210" x2="924" y2="210" marker-end="url(#ad)"/>
-  <text class="tM tD" x="747" y="231" font-size="13" text-anchor="middle">200 {agent_id} &nbsp;&middot;&nbsp; persist id in ~/.c2agent.json</text>
+  <text class="tM tD" x="747" y="231" font-size="13" text-anchor="middle">200 {agent_id} &#160;&#183;&#160; persist id in ~/.c2agent.json</text>
 
   <!-- 2. operator creates a task -->
   <line class="sd" x1="210" y1="278" x2="554" y2="278" marker-end="url(#ad)"/>
@@ -50,13 +49,13 @@
   <line class="sg" x1="930" y1="340" x2="566" y2="340" marker-end="url(#ag)"/>
   <text class="tM tW" x="747" y="326" font-size="13" text-anchor="middle">POST /api/checkin {agent_id}</text>
   <line class="sd" x1="560" y1="372" x2="924" y2="372" marker-end="url(#ad)"/>
-  <text class="tM tD" x="747" y="392" font-size="13" text-anchor="middle">200 {tasks: [...]} &nbsp;&middot;&nbsp; 404 unknown &rarr; re-register</text>
+  <text class="tM tD" x="747" y="392" font-size="13" text-anchor="middle">200 {tasks: [...]} &#160;&#183;&#160; 404 unknown &#8594; re-register</text>
 
   <!-- loop brace + label (agent side) -->
   <line class="sga" x1="985" y1="326" x2="985" y2="386" stroke-width="2"/>
   <line class="sga" x1="975" y1="326" x2="985" y2="326" stroke-width="2"/>
   <line class="sga" x1="975" y1="386" x2="985" y2="386" stroke-width="2"/>
-  <text class="tM tS" x="1012" y="344" font-size="12">every interval &plusmn; jitter</text>
+  <text class="tM tS" x="1012" y="344" font-size="12">every interval &#177; jitter</text>
   <text class="tM tS" x="1012" y="363" font-size="12">(default 10 s)</text>
 
   <!-- 4. server hands a task -->
@@ -66,7 +65,7 @@
   <!-- 5. agent executes -->
   <rect class="box" x="805" y="494" width="250" height="56" rx="8"/>
   <text class="tM tW" x="930" y="517" font-size="12" text-anchor="middle">execute task locally</text>
-  <text class="tM tD" x="930" y="536" font-size="11" text-anchor="middle">shell &middot; download &middot; upload &middot; keylog &middot; steal &hellip;</text>
+  <text class="tM tD" x="930" y="536" font-size="11" text-anchor="middle">shell &#183; download &#183; upload &#183; keylog &#183; steal &#8230;</text>
 
   <!-- 6. result -->
   <line class="sg" x1="930" y1="590" x2="566" y2="590" marker-end="url(#ag)"/>
@@ -74,11 +73,11 @@
 
   <!-- 7. dashboard update -->
   <line class="sd" x1="560" y1="640" x2="216" y2="640" marker-end="url(#ad)"/>
-  <text class="tM tD" x="383" y="626" font-size="13" text-anchor="middle">dashboard updates &middot; auto-retry unacked tasks</text>
+  <text class="tM tD" x="383" y="626" font-size="13" text-anchor="middle">dashboard updates &#183; auto-retry unacked tasks</text>
 
   <!-- idle -->
-  <text class="tM tS" x="560" y="710" font-size="12" text-anchor="middle">sleep interval &plusmn; jitter &nbsp;&middot;&nbsp; unacked tasks re-sent after C2_RETRY_AFTER</text>
+  <text class="tM tS" x="560" y="710" font-size="12" text-anchor="middle">sleep interval &#177; jitter &#160;&#183;&#160; unacked tasks re-sent after C2_RETRY_AFTER</text>
 
   <line class="op" x1="70" y1="830" x2="1130" y2="830"/>
-  <text class="tM tS" x="600" y="860" font-size="13" text-anchor="middle">one wire protocol &nbsp;·&nbsp; 14 language clients &nbsp;·&nbsp; SQLite-backed task queue</text>
+  <text class="tM tS" x="600" y="860" font-size="13" text-anchor="middle">one wire protocol &#160;&#183;&#160; 14 language clients &#160;&#183;&#160; SQLite-backed task queue</text>
 </svg>
