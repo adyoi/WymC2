@@ -1017,7 +1017,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ -n "$SERVER" ] && [ -n "$TOKEN" ] || die "usage: agent.sh --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE]"
+[ -n "$SERVER" ] && [ -n "$TOKEN" ] || die "usage: agent.sh --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]"
 [ -z "${C2_STATE_OVERRIDE:-}" ] && [ -n "$C2_STATE_FILE" ] && STATE_FILE="$C2_STATE_FILE"
 
 SERVER="${SERVER%/}"

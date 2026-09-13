@@ -24,6 +24,7 @@ Flags:
     --jitter N        random jitter in seconds added to the interval
     --state FILE      state file persisting the agent id (default ~/.c2agent.json)
     --verbose         print activity to stdout
+    -h, --help        show this help and exit
 
 Only use against systems you own or are authorized to test.
 
@@ -77,7 +78,20 @@ while ($i -lt $args.Count) {
     }
     elseif ($a -match '^-{1,2}([a-zA-Z]+)$') {
         $nm = $Matches[1].ToLower()
-        if ($nm -eq 'verbose') {
+        if ($nm -eq 'help') {
+            Write-Output 'usage: powershell agent.ps1 --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]'
+            Write-Output ''
+            Write-Output 'Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):'
+            Write-Output '  --server URL      server base URL (required unless C2_SERVER is set)'
+            Write-Output '  --token TOKEN     shared agent token (required unless C2_TOKEN is set)'
+            Write-Output '  --interval N      heartbeat interval in seconds (default 10, min 1)'
+            Write-Output '  --jitter N        random jitter in seconds added to the interval'
+            Write-Output '  --state FILE      state file persisting the agent id (default ~/.c2agent.json)'
+            Write-Output '  --verbose         print activity to stdout'
+            Write-Output '  -h, --help        show this help and exit'
+            exit 0
+        }
+        elseif ($nm -eq 'verbose') {
             $Script:ScriptVerbose = $true
         }
         elseif ($nm -in $optNames) {

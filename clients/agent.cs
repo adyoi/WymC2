@@ -1200,11 +1200,12 @@ class Agent
                 case "--verbose": Verbose = true; break;
             }
         }
+        server ??= Environment.GetEnvironmentVariable("C2_SERVER");
         token ??= Environment.GetEnvironmentVariable("C2_TOKEN");
         if (server == null || string.IsNullOrEmpty(token))
         {
-            Console.WriteLine("usage: agent --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]");
-            Console.WriteLine("(token also accepted via C2_TOKEN env var)");
+            Console.WriteLine("usage: agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
+            Console.WriteLine("(--server/--token also accepted via C2_SERVER/C2_TOKEN env vars)");
             return;
         }
         Server = server.TrimEnd('/');

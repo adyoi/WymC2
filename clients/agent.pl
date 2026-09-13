@@ -28,9 +28,9 @@ my $STATE_FILE    = File::Spec->catfile($ENV{HOME} || '.', '.c2agent.json');
 my $server   = '';
 my $token    = '';
 my $agent_id = '';
-my $interval = 10;
-my $jitter   = 0;
-my $verbose  = 0;
+my $interval = $ENV{C2_INTERVAL} || 10;
+my $jitter   = $ENV{C2_JITTER}   || 0;
+my $verbose  = ($ENV{C2_VERBOSE} && ($ENV{C2_VERBOSE} eq '1' || $ENV{C2_VERBOSE} eq 'true') ? 1 : 0);
 my $state_file = '';
 
 my %clones;  # target -> {status, last_check, relaunches, command, stop, interval}

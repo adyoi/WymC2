@@ -1345,7 +1345,7 @@ func main() {
 	flag.Parse()
 
 	if *serverFlag == "" || *tokenFlag == "" {
-		log.Fatal("usage: agent --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]")
+		log.Fatal("usage: agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]")
 	}
 	server = strings.TrimRight(*serverFlag, "/")
 	token = *tokenFlag

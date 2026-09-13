@@ -962,20 +962,37 @@ class c2agent:
             self._log("interrupted by user - exiting")
 
 
+def _env_int(key: str, default: int) -> int:
+    try:
+        return int(os.environ[key])
+    except (KeyError, ValueError):
+        return default
+
+
+def _env_float(key: str, default: float) -> float:
+    try:
+        return float(os.environ[key])
+    except (KeyError, ValueError):
+        return default
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
+        prog="python agent.py",
+        usage="%(prog)s --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]",
         description="C2 agent (Python reference client)")
     parser.add_argument("--server", default=os.environ.get("C2_SERVER", ""),
                         help="C2 server URL (C2_SERVER env var accepted)")
     parser.add_argument("--token", default=os.environ.get("C2_TOKEN", ""),
                         help="shared agent token (C2_TOKEN env var accepted)")
-    parser.add_argument("--interval", type=int, default=10,
+    parser.add_argument("--interval", type=int, default=_env_int("C2_INTERVAL", 10),
                         help="heartbeat interval in seconds (default 10)")
-    parser.add_argument("--jitter", type=float, default=0.0,
+    parser.add_argument("--jitter", type=float, default=_env_float("C2_JITTER", 0.0),
                         help="random jitter in seconds added to the interval")
-    parser.add_argument("--state", default=DEFAULT_STATE,
+    parser.add_argument("--state", default=os.environ.get("C2_STATE_FILE", DEFAULT_STATE),
                         help=f"state file (default {DEFAULT_STATE})")
     parser.add_argument("--verbose", action="store_true",
+                        default=os.environ.get("C2_VERBOSE", "") in ("1", "true"),
                         help="print activity to stdout")
     _value_opts = {"--server", "--token", "--interval", "--jitter", "--state"}
     _argv, _i = [], 0

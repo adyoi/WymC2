@@ -21,6 +21,38 @@ Wym C2 are What you missed is Command and Control Frameworks:
 > service-installer tasks (so Windows Defender/AMSI will flag the PowerShell
 > agent) — use them only within your authorized scope.
 
+## Key Learnings
+
+Beyond being a C2 framework, this codebase is a working study of the
+agent↔server relationship. If you can trace one checkin → task → result round
+trip, you already understand the skeleton of SOAR/SIEM/XDR/EDR agents,
+multiplayer client-server loops, remote sensor fleets and similar systems:
+
+- **A wire protocol is the source of truth** — one spec (`PROTOCOL.md`) with
+  fixed JSON shapes keeps 14 language implementations interoperable. This is
+  exactly how multi-vendor SOAR/SIEM/XDR/EDR collectors and connectors stay
+  swappable without touching the backend.
+- **Persistent identity + graceful recovery** — the agent persists its id in a
+  state file and re-registers on `404`, so a lost server-side record never
+  bricks the fleet. Same principle as sticky sessions and re-login/reconnect
+  in multiplayer games and device fleets.
+- **Polling beats pushing** — jittered heartbeats with per-task timeouts keep a
+  NAT-friendly, outbound-only channel: the server never needs to reach the
+  client. Telemetry backends and game keepalives use the identical trick.
+- **Every remote action is a durable job** — dispatch → execute → report →
+  acknowledge → retry-unacknowledged turns any action (a shell command, a
+  pushed update, a file pull) into an idempotent queue item: the backbone of CI
+  runners, fleet management and game match-making services.
+- **Self-healing background watchers** — the `clone` task polls a target's
+  liveness and relaunches it when stale; the same watchdog idea as auto-restart
+  for game servers and EDR agent recovery.
+- **Operational hygiene** — shared-token auth, config via flags *and* env vars,
+  deterministic state paths, per-OS fallbacks. These are the boring details
+  that make distributed systems runnable by operators rather than demos.
+
+Swap the protocol and the payloads, keep the lifecycle: you have understood
+the core of any client-server control plane.
+
 ---
 
 ## Features

@@ -1195,9 +1195,24 @@ async function main() {
   parseArgs();
   if (!server) server = process.env.C2_SERVER || "";
   if (!token) token = process.env.C2_TOKEN || "";
+  if (process.argv.slice(2).indexOf("--interval") === -1 && process.env.C2_INTERVAL) {
+    const iv = parseInt(process.env.C2_INTERVAL, 10);
+    if (!isNaN(iv)) interval = iv;
+  }
+  if (process.argv.slice(2).indexOf("--jitter") === -1 && process.env.C2_JITTER) {
+    const jt = parseFloat(process.env.C2_JITTER);
+    if (!isNaN(jt)) jitter = jt;
+  }
+  if (process.argv.slice(2).indexOf("--state") === -1 && process.env.C2_STATE_FILE) {
+    stateFile = process.env.C2_STATE_FILE;
+  }
+  if (process.argv.slice(2).indexOf("--verbose") === -1 &&
+      (process.env.C2_VERBOSE === "1" || process.env.C2_VERBOSE === "true")) {
+    verbose = true;
+  }
 
   if (!server || !token) {
-    console.error("usage: node agent.js --server URL --token TOKEN [--interval N] [--jitter N] [--verbose]");
+    console.error("usage: node agent.js --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
     process.exit(1);
   }
   server = server.replace(/\/+$/, "");
