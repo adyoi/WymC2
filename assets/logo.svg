@@ -20,8 +20,8 @@
   <!-- hexagon grid frame -->
   <polygon class="hex" points="170,60 263,118 263,234 170,292 77,234 77,118"/>
 
-  <!-- monogram: W -->
-  <text class="t1" x="170" y="212" font-size="100" text-anchor="middle">W</text>
+  <!-- monogram: W as \/\/ strokes -->
+  <path d="M 105 128 L 135 236 L 165 128 L 195 236 L 225 128" fill="none" stroke="#00ff41" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- ambient grid dots -->
   <circle cx="198" cy="40" r="3" class="dot"/>
