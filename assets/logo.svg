@@ -41,12 +41,11 @@
   <circle class="acc" cx="196" cy="182" r="4"/>
   <circle class="acc" cx="180" cy="220" r="3"/>
 
-  <!-- wordmark (backdrop painted first so text stays on top) -->
-  <rect x="322" y="56" width="352" height="190" rx="10" fill="#0d1a12" opacity="0.5"/>
+  <!-- wordmark -->
   <text class="t1" x="330" y="150" font-size="88">WYM</text>
-  <text class="t2" x="330" y="236" font-size="88">C2</text>
+  <text class="t2" x="330" y="238" font-size="88">C2</text>
 
   <!-- tagline -->
-  <text class="tag" x="334" y="264" font-size="20">COMMAND &amp; CONTROL FRAMEWORK</text>
-  <text class="tag" x="334" y="292" font-size="15" letter-spacing="2px">14 CLIENT LANGUAGES  &#183;  HTTP/JSON  &#183;  WIN/LINUX/macOS</text>
+  <text class="tag" x="330" y="270" font-size="20">COMMAND &amp; CONTROL FRAMEWORK</text>
+  <text class="tag" x="330" y="298" font-size="15" letter-spacing="2px">14 CLIENT LANGUAGES  &#183;  HTTP/JSON  &#183;  WIN/LINUX/macOS</text>
 </svg>
