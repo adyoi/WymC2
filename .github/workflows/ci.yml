@@ -53,8 +53,11 @@ jobs:
         run: php -l clients/agent.php
       - name: Lua
         run: luac -p clients/agent.lua
-      - name: Go build
-        run: go build -o /tmp/c2agent clients/agent.go
+      - name: Go build (linux + windows, explicit files)
+        run: |
+          cd clients
+          go build -o /tmp/c2agent-linux agent.go clone_unix.go keylog_linux.go
+          GOOS=windows go build -o /tmp/c2agent-win.exe agent.go clone_windows.go keylog_windows.go
 
   compiled-agents:
     name: Compiled agents
@@ -85,4 +88,4 @@ jobs:
           mkdir -p /tmp/cs && cd /tmp/cs
           dotnet new console -o app --force
           cp "$GITHUB_WORKSPACE"/clients/agent.cs app/Program.cs
-          dotnet build app -o out -q
+          dotnet build app -o out -q -p:UseSharedCompilation=false
