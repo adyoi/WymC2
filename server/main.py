@@ -1936,7 +1936,7 @@ def _normalize_payload(value: str) -> tuple:
     if m:
         return m["installer"], m["payload"]
     # legacy shell_os values still map to sane payloads
-    if value in ("linux", "darwin", "bash", "sh"):
+    if value in ("linux", "darwin", "bash", "sh", "unix"):
         return "unix", "unix-curl"
     return "windows", "win-irm"
 
