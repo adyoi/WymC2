@@ -484,45 +484,52 @@
   const targetWrap = document.getElementById('target-wrap');
   const targetSel = document.getElementById('gen-target');
   const shellSel = document.getElementById('gen-shell-os');
-  let shellTouched = false;
-  let targetTouched = false;
 
-  // Keep the Payload shell in sync with the selected target platform (unless
-  // the user picked a shell manually): a Win target needs a Win shell one-liner
-  // and a Linux/macOS target needs a Unix one-liner. Only meaningful while a
-  // build is being requested, and never overrides a manual shell choice.
-  function syncShellFromTarget(){
-    if (shellTouched || !buildCb.checked) return;
-    const fam = (targetSel.value || '').startsWith('win_') ? 'win-irm' : 'unix-curl';
-    if (shellSel.value !== fam) shellSel.value = fam;
+  function shellIsWin(){
+    return (shellSel.value || '').startsWith('win-');
   }
 
-  // Payload → Target Platform: when the user picks a Windows payload, snap the
-  // target to the first Windows option; when they pick a Unix payload, snap to
-  // the first Linux option. Extension re-syncs after the target moves.
+  // Target Platform → Payload: a Win target needs a Win shell one-liner and a
+  // Linux/macOS target a Unix one. A cross-family mismatch snaps the payload to
+  // the matching default (win-irm / unix-curl); a same-family variant
+  // (win-iex vs win-irm, unix-wget vs unix-curl) is preserved so the user's
+  // payload choice is never clobbered.
+  function syncShellFromTarget(){
+    if (!buildCb.checked) return;
+    const isWinTarget = (targetSel.value || '').startsWith('win_');
+    if (shellIsWin() === isWinTarget) return;
+    shellSel.value = isWinTarget ? 'win-irm' : 'unix-curl';
+  }
+
+  // Payload → Target Platform: a Windows payload snaps the target into the
+  // first Windows option. A Unix payload is valid on both linux and darwin
+  // targets, so it only snaps away when the target is currently Windows; the
+  // exact platform pick (win_x64 vs win_x86, linux vs darwin) is preserved.
   function syncTargetFromShell(){
-    if (targetTouched || !buildCb.checked) return;
-    const isWin = (shellSel.value || '').startsWith('win-');
-    const wantFam = isWin ? 'win' : 'linux';
+    if (!buildCb.checked) return;
     const curFam = (targetSel.value || '').split('_')[0];
-    if (curFam !== wantFam) {
-      const newT = allTargets.find(t => t.v.startsWith(wantFam + '_'));
+    const wantFam = shellIsWin() ? 'win' : null;   // unix payload: both ok
+    if (wantFam){
+      if (curFam !== 'win') {
+        const newT = allTargets.find(t => t.v.startsWith('win_'));
+        if (newT) targetSel.value = newT.v;
+      }
+    } else if (curFam !== 'linux' && curFam !== 'darwin'){
+      const newT = allTargets.find(t => t.v.startsWith('linux_'));
       if (newT) targetSel.value = newT.v;
     }
   }
 
-  // Target → Payload + Extension: update payload to match the target OS family
-  // (unless the user chose the payload manually) and always refresh the
-  // Extension dropdown presets.
+  // Target Platform → Payload + Extension: keep the payload family in lockstep
+  // (never overridden by symbol-driven events — programmatic .value does not
+  // fire 'change', so no feedback loop) and refresh the Extension presets.
   function onTargetChange(){
-    targetTouched = true;
     syncShellFromTarget();
     const extVisible = extWrap && !extWrap.classList.contains('hidden');
     if (extVisible) applyExtUI();
   }
 
   shellSel.addEventListener('change', () => {
-    shellTouched = true;
     syncTargetFromShell();
     const extVisible = extWrap && !extWrap.classList.contains('hidden');
     if (extVisible) applyExtUI();
@@ -602,10 +609,6 @@
   extOther.addEventListener('input', () => { extHidden.value = computeExt(); });
 
   function toggleBuildOptions(){
-    // Language / build-toggle changes re-arm the auto-sync so Payload and
-    // Target Platform realign after the user picked a different runtime.
-    shellTouched = false;
-    targetTouched = false;
     const isCompiled = compiledLangs.includes(langSel.value);
     buildWrap.classList.toggle('hidden', !isCompiled);
     targetWrap.classList.toggle('hidden', !(isCompiled && buildCb.checked));
