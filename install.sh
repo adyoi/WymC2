@@ -334,6 +334,7 @@ case "$ACTION" in
             fi
             rm -f "$PIDFILE"
         fi
+        rm -f "$PORTFILE"
         [ "$stopped" = true ] || info "no running server found"
         ;;
     run)

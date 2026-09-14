@@ -217,6 +217,7 @@ function Stop-Server {
         }
         Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
     }
+    Remove-Item -LiteralPath $PortFile -Force -ErrorAction SilentlyContinue
     if (-not $stopped) { Info "no running server found" }
 }
 
