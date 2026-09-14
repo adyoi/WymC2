@@ -10,6 +10,7 @@ Run:
     # or: uvicorn main:app --host 0.0.0.0 --port 8000
 """
 import asyncio
+import copy
 import hashlib
 import io
 import json
@@ -3691,6 +3692,46 @@ async def users_set_password(
     )
 
 
+class _QuietSourceMaps(logging.Filter):
+    """Drop browser source-map 404 noise from the uvicorn access log.
+
+    DevTools fires GET /sm/<hash>.map and /static/xterm/*.js.map while a page
+    is open; none of those exist server-side, so every page load logs fake 404
+    lines that drown real errors. Filtering on the interpolated message keeps
+    the access log for everything else intact.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        if "404" not in msg or ".map" not in msg:
+            return True
+        return False
+
+
+def _build_log_config():
+    """uvicorn log config with the browser source-map noise filtered out."""
+    try:
+        from uvicorn.config import LOGGING_CONFIG as _uses_uvicorn_config
+    except Exception:  # pragma: no cover - older uvicorn fallback
+        _uses_uvicorn_config = None
+
+    if _uses_uvicorn_config is None:
+        # No uvicorn LOGGING_CONFIG to build on; let uvicorn keep its defaults.
+        return None
+
+    config = copy.deepcopy(_uses_uvicorn_config)
+    config.setdefault("filters", {})["quiet_source_maps"] = {
+        "()": f"{_QuietSourceMaps.__module__}.{_QuietSourceMaps.__qualname__}",
+    }
+    for handler in config.get("handlers", {}).values():
+        if handler.get("formatter") in ("access", "default"):
+            handler.setdefault("filters", []).append("quiet_source_maps")
+    return config
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -3702,4 +3743,5 @@ if __name__ == "__main__":
         host=os.environ.get("C2_HOST", "127.0.0.1"),
         port=int(os.environ.get("C2_PORT", "8000")),
         log_level="info",
+        log_config=_build_log_config(),
     )
