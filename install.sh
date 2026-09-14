@@ -42,6 +42,7 @@ Usage: ./install.sh [options] [install|check|start|run]
   install   Create venv, install deps, check toolchain, start server (default)
   check     Create venv + install deps + check toolchain only
   start     Start server (assumes venv already exists)
+  stop      Stop a running server (does not delete anything)
   run       Same as install, but run in the foreground
 
 Options:
@@ -63,7 +64,7 @@ EOF
 while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
-        check|start|run|install) ACTION="$1"; shift ;;
+        check|start|stop|run|install) ACTION="$1"; shift ;;
         -Host|--host|-H)
             [ $# -ge 2 ] || { echo "missing value for $1" >&2; exit 1; }
             LISTEN_HOST="$2"; shift 2 ;;
@@ -318,6 +319,22 @@ case "$ACTION" in
         PY="$VENV_PY"
         do_start
         printf '\nDone. Open http://%s:%s/login\n' "$LISTEN_HOST" "$LISTEN_PORT"
+        ;;
+    stop)
+        log "Stopping server"
+        stopped=false
+        if [ -f "$PIDFILE" ]; then
+            pid="$(tr -d '[:space:]' < "$PIDFILE" || true)"
+            if is_our_pid "$pid"; then
+                kill "$pid" 2>/dev/null || true
+                sleep 0.4
+                kill -9 "$pid" 2>/dev/null || true
+                info "stopped server (PID $pid)"
+                stopped=true
+            fi
+            rm -f "$PIDFILE"
+        fi
+        [ "$stopped" = true ] || info "no running server found"
         ;;
     run)
         ensure_venv

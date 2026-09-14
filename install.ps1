@@ -29,7 +29,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet("install", "check", "start", "run")]
+    [ValidateSet("install", "check", "start", "stop", "run")]
     [string]$Action = "install",
     [Alias("Host")]
     [string]$ListenHost = "",
@@ -204,6 +204,22 @@ function Stop-PreviousServer {
     }
 }
 
+function Stop-Server {
+    Hdr "Stopping server"
+    $stopped = $false
+    if (Test-Path -LiteralPath $PidFile) {
+        $old = 0
+        [void][int]::TryParse((Get-Content -LiteralPath $PidFile -Raw).Trim(), [ref]$old)
+        if ($old -gt 0 -and (Test-OurServerPid $old)) {
+            Stop-Process -Id $old -Force -ErrorAction SilentlyContinue
+            Info "stopped server (PID $old)"
+            $stopped = $true
+        }
+        Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
+    }
+    if (-not $stopped) { Info "no running server found" }
+}
+
 # ---------------- start server ----------------
 function Start-Server {
     Hdr "Starting server"
@@ -267,6 +283,7 @@ switch ($Action) {
         Test-BuilderTools
     }
     "start" { Start-Server }
+    "stop"  { Stop-Server }
     "run"   {
         Ensure-Venv
         Test-BuilderTools
