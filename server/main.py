@@ -2061,17 +2061,26 @@ def _target_labels(target: str) -> tuple[str, str]:
     return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
 
 
-def _artifact_name(language: str, target: str, ext: str = "") -> str:
-    """Uniform output name: wym_<lang>_<os>_<arch><ext>.
-
-    Java jars are platform-independent so they skip the os/arch segment. ext is
-    normalized with a leading dot ('exe' -> '.exe'); empty ext = no extension
-    (Linux/macOS binaries).
-    """
+def _artifact_stem(language: str, target: str) -> str:
+    """Base output name: wym_<lang>_<os>_<arch>. Java jars are platform-
+    independent so they skip the os/arch segment."""
     if language == "java":
-        return "wym_java.jar"
+        return "wym_java"
     os_label, arch_label = _target_labels(target)
-    return f"wym_{language}_{os_label}_{arch_label}{_norm_ext(ext)}"
+    return f"wym_{language}_{os_label}_{arch_label}"
+
+
+def _artifact_name(language: str, target: str, ext: str = "", build_id: str = "") -> str:
+    """Uniform output name: wym_<lang>_<os>_<arch>_<build_id><ext>.
+
+    ext is normalized with a leading dot ('exe' -> '.exe'); empty ext = no
+    extension (Linux/macOS binaries). build_id is a short source-hash suffix
+    that keeps every distinct build a distinct file (java -> wym_java_<id>.jar),
+    so the build cache check is simply 'the file exists'."""
+    stem = _artifact_stem(language, target)
+    if build_id:
+        stem = f"{stem}_{build_id}"
+    return f"{stem}{_norm_ext(ext)}"
 
 # Serialize server-side builds. Same-target races would corrupt the build cache;
 # the lock keeps them strictly sequential WITHOUT freezing the event loop (the
@@ -2264,29 +2273,22 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
         return None, f"unknown target: {target}"
     t = BUILD_TARGETS[target]
     ext = t["ext"]
-    # Uniform artifact naming: wym_<lang>_<os>_<arch><ext> (default ext).
+    # Unique-per-source artifact naming: wym_<lang>_<os>_<arch>_<srcid><ext>
+    # (java keeps a platform-neutral stem). The short source-hash suffix makes
+    # every distinct build a distinct file, so the cache check collapses to
+    # "the file exists" — an up-to-date name can never shadow another build.
+    build_id = _source_hash(language)[:8]
     if language == "java":
-        # A JAR is platform-independent; keep a single artifact.
-        out_name = _artifact_name(language, target)
-        out_path = BUILDS_DIR / out_name
-        hash_path = BUILDS_DIR / "wym_java.hash"
+        # A JAR is platform-independent but still gets the src-id suffix.
+        out_path = BUILDS_DIR / _artifact_name(language, target, ".jar", build_id)
     else:
-        out_name = _artifact_name(language, target, ext)
-        out_path = BUILDS_DIR / out_name
-        os_label, arch_label = _target_labels(target)
-        hash_path = BUILDS_DIR / f"wym_{language}_{os_label}_{arch_label}.hash"
+        out_path = BUILDS_DIR / _artifact_name(language, target, ext, build_id)
+    hash_path = BUILDS_DIR / f"{_artifact_stem(language, target)}_{build_id}.hash"
 
-    # cache hit only if the hash marker matches the current source
-    if out_path.is_file() and hash_path.is_file() \
-            and hash_path.read_text().strip() == _source_hash(language):
+    if out_path.is_file():
         note(f"[cache hit] reusing {out_path.name}")
         return out_path, ""
-
-    # stale cached binary → force a rebuild
-    if out_path.is_file():
-        out_path.unlink(missing_ok=True)
-    if hash_path.is_file():
-        hash_path.unlink(missing_ok=True)
+    hash_path.unlink(missing_ok=True)
 
     src = None
     if language != "c" and language != "cpp":
@@ -2531,6 +2533,7 @@ def _run_build_job(job_id: str, language: str, target: str) -> None:
     error/fix tracking) and recording the finished build in history.json."""
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     logfile = BUILD_LOG_DIR / f"{timestamp}_{job_id}_{language}_{target}.log"
+    started = time.time()
     try:
         fh = open(logfile, "a", encoding="utf-8", buffering=1)
     except OSError:
@@ -2583,6 +2586,7 @@ def _run_build_job(job_id: str, language: str, target: str) -> None:
         "target": target,
         "ok": ok,
         "message": msg,
+        "elapsed": round(time.time() - started, 1),
         "logfile": logfile.name if fh is not None else "",
     })
 
@@ -2702,15 +2706,18 @@ async def download_build(request: Request, language: str, target: str = "win_x64
     t = BUILD_TARGETS.get(target)
     if not t:
         raise HTTPException(status_code=400, detail="unknown target")
-    # on-disk artifact always has the platform default extension
+    # on-disk artifact carries the platform default extension plus the source-
+    # id suffix; the served filename may carry a requested (.exe/.scr/.out/…)
+    # extension instead.
+    build_id = _source_hash(language)[:8]
     if language == "java":
-        path = BUILDS_DIR / _artifact_name(language, target)
+        path = BUILDS_DIR / _artifact_name(language, target, ".jar", build_id)
+        fname = _artifact_name(language, target, ".jar", build_id)
     else:
-        path = BUILDS_DIR / _artifact_name(language, target, t["ext"])
+        path = BUILDS_DIR / _artifact_name(language, target, t["ext"], build_id)
+        fname = _artifact_name(language, target, ext or t["ext"], build_id)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="binary not found — build first")
-    # the served filename may carry a requested (.exe/.scr/.out/…) extension
-    fname = _artifact_name(language, target, ext or t["ext"])
     return FileResponse(path, media_type="application/octet-stream", filename=fname)
 
 

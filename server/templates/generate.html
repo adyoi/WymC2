@@ -222,12 +222,13 @@
         <th class="px-3 py-2">time</th>
         <th class="px-3 py-2">build</th>
         <th class="px-3 py-2">status</th>
+        <th class="px-3 py-2">duration</th>
         <th class="px-3 py-2">result</th>
-        <th class="px-3 py-2 text-right">detail</th>
+        <th class="px-3 py-2 text-right">actions</th>
       </tr>
     </thead>
     <tbody id="build-history-body">
-      <tr><td colspan="5" class="px-3 py-4 text-muted" id="build-history-empty">loading…</td></tr>
+      <tr><td colspan="6" class="px-3 py-4 text-muted" id="build-history-empty">loading…</td></tr>
     </tbody>
   </table>
 </div>
@@ -346,8 +347,11 @@
     <div id="build-terminal" class="flex-1 bg-black overflow-hidden min-h-0"></div>
     <div class="flex items-center justify-between gap-4 px-4 py-1.5 border-t border-dark-400 bg-dark-700 text-[10px] font-mono text-muted flex-shrink-0">
       <span id="build-modal-elapsed">0.0s</span>
-      <span id="build-modal-msg" class="truncate"></span>
-      <span id="build-modal-result"></span>
+      <span id="build-modal-msg" class="truncate min-w-0"></span>
+      <span class="flex items-center gap-2 flex-shrink-0">
+        <button type="button" id="build-modal-copy" disabled class="px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">copy log</button>
+        <span id="build-modal-result"></span>
+      </span>
     </div>
   </div>
 </div>
@@ -505,17 +509,24 @@
   // first Windows option. A Unix payload is valid on both linux and darwin
   // targets, so it only snaps away when the target is currently Windows; the
   // exact platform pick (win_x64 vs win_x86, linux vs darwin) is preserved.
+  // C# is Windows-only (the server rejects every other target), so it always
+  // wins: the target stays in the win family regardless of the payload.
+  function targetsForLang(lang){
+    return lang === 'csharp'
+      ? allTargets.filter(t => t.v.startsWith('win_'))
+      : allTargets;
+  }
   function syncTargetFromShell(){
     if (!buildCb.checked) return;
+    const valid = targetsForLang(langSel.value);
     const curFam = (targetSel.value || '').split('_')[0];
-    const wantFam = shellIsWin() ? 'win' : null;   // unix payload: both ok
-    if (wantFam){
-      if (curFam !== 'win') {
-        const newT = allTargets.find(t => t.v.startsWith('win_'));
-        if (newT) targetSel.value = newT.v;
-      }
+    const wantWin = langSel.value === 'csharp' || shellIsWin();
+    if (wantWin){
+      if (curFam === 'win') return;
+      const newT = valid.find(t => t.v.startsWith('win_'));
+      if (newT) targetSel.value = newT.v;
     } else if (curFam !== 'linux' && curFam !== 'darwin'){
-      const newT = allTargets.find(t => t.v.startsWith('linux_'));
+      const newT = valid.find(t => t.v.startsWith('linux_'));
       if (newT) targetSel.value = newT.v;
     }
   }
@@ -535,9 +546,10 @@
     if (extVisible) applyExtUI();
   });
   targetSel.addEventListener('change', onTargetChange);
-  // Compiled langs each support every target: .NET (big-pickle dotnet-install)
-  // cross-publishes to win/linux/osx RIDs, Go/Rust/C/C++/Java fire from the
-  // corresponding toolchains. Only the extension preset differs (see below).
+  // Compiled langs each support every target: Go/Rust/C/C++/Java fire from the
+  // corresponding toolchains across win/linux/osx; C# is Windows-only (the
+  // server rejects win-free targets), so its picker shows just win_x64/x86.
+  // Only the extension preset differs (see below).
   const compiledLangs = ['go', 'csharp', 'rust', 'c', 'cpp', 'java'];
 
   const allTargets = [
@@ -547,7 +559,7 @@
   ];
 
   function rebuildTargets(lang) {
-    const targets = allTargets;
+    const targets = targetsForLang(lang);
     const curVal = targetSel.value;
     const cur = targets.some(t => t.v === curVal) ? curVal : targets[0].v;
     targetSel.innerHTML = targets.map(t =>
@@ -665,6 +677,9 @@
   var pillText = document.getElementById('build-min-text');
   var pillDot = document.getElementById('build-min-dot');
   var pillRestore = document.getElementById('build-min-restore');
+  var copyBtn = document.getElementById('build-modal-copy');
+  var jobId = '';
+  var collected = [];
 
   function writeLine(s){ if(term) term.write('\r\n' + s); }
   function delay(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
@@ -737,6 +752,9 @@
     var started = Date.now();
     var lastCount = 0;
     var lastWritten = '';
+    collected.length = 0;
+    jobId = '';
+    if(copyBtn) copyBtn.disabled = true;
 
     try {
       var resp = await fetch('/api/build/start', {
@@ -751,6 +769,8 @@
         return;
       }
       var data = await resp.json();
+      jobId = data.job_id;
+      if(copyBtn) copyBtn.disabled = false;
       writeLine('\x1b[1m' + data.language + ' \u2192 ' + data.target + '\x1b[0m');
       writeLine('');
       setStatus('building\u2026', 'text-accent');
@@ -777,6 +797,7 @@
           if(lines[i] === '' && lastWritten === '') continue;
           term.write(lines[i] + '\r\n');
           lastWritten = lines[i];
+          collected.push(lines[i]);
         }
         lastCount = lines.length;
         if(j.done){ done = true; success = !!j.success; message = j.message || ''; }
@@ -818,6 +839,23 @@
     buildModal.style.display = 'none';
   });
   if(pillRestore) pillRestore.addEventListener('click', openBuildModal);
+  if(copyBtn){
+    var copyLabel = function(txt){
+      copyBtn.textContent = txt;
+      setTimeout(function(){ copyBtn.textContent = 'copy log'; }, 1500);
+    };
+    copyBtn.addEventListener('click', function(){
+      var doCopy = function(txt){
+        navigator.clipboard.writeText(txt).then(function(){ copyLabel('copied \u2713'); }).catch(function(){});
+      };
+      if(!jobId){ doCopy(collected.join('\n')); return; }
+      // prefer the persisted logfile (matches the Build Log panel)
+      fetch('/api/build/logfile/' + encodeURIComponent(jobId))
+        .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('logfile')); })
+        .then(function(t){ doCopy(t); })
+        .catch(function(){ doCopy(collected.join('\n')); });
+    });
+  }
   window.addEventListener('resize', fitTerm);
 })();
 </script>
@@ -836,38 +874,58 @@
     }).then(function(d){
       var rows = d.builds || [];
       if(!rows.length){
-        body.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-muted">no builds yet — run a server build to see it here.</td></tr>';
+        body.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-muted">no builds yet — run a server build to see it here.</td></tr>';
         return;
       }
       var html = '';
       rows.forEach(function(b){
         var ok = !!b.ok;
         var st = ok ? '<span class="text-green-400">ok</span>' : '<span class="text-red-400">failed</span>';
+        var dur = b.elapsed != null ? esc(b.elapsed) + 's' : '\u2014';
         html += '<tr class="border-b border-dark-700">'
           + '<td class="px-3 py-2 text-muted whitespace-nowrap">' + esc(b.ts) + '</td>'
           + '<td class="px-3 py-2 text-gray-200">' + esc(b.language) + ' \u2192 ' + esc(b.target) + '</td>'
           + '<td class="px-3 py-2">' + st + '</td>'
-          + '<td class="px-3 py-2 text-muted truncate max-w-[200px]">' + esc(b.message) + '</td>'
-          + '<td class="px-3 py-2 text-right"><button type="button" class="bld-detail px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer" data-id="' + esc(b.job_id) + '">log</button></td></tr>'
-          + '<tr class="bld-log hidden border-b border-dark-700"><td colspan="5" class="px-3 py-2"><pre class="max-h-56 overflow-auto whitespace-pre-wrap text-green-400/80 font-mono text-[11px]"></pre></td></tr>';
+          + '<td class="px-3 py-2 text-muted whitespace-nowrap">' + dur + '</td>'
+          + '<td class="px-3 py-2 text-muted truncate max-w-[180px]">' + esc(b.message) + '</td>'
+          + '<td class="px-3 py-2 text-right whitespace-nowrap"><span class="inline-flex gap-1.5">'
+          + '<button type="button" class="bld-copy px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer" data-id="' + esc(b.job_id) + '">copy</button>'
+          + '<button type="button" class="bld-detail px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer" data-id="' + esc(b.job_id) + '">log</button>'
+          + '</span></td></tr>'
+          + '<tr class="bld-log hidden border-b border-dark-700"><td colspan="6" class="px-3 py-2"><pre class="max-h-56 overflow-auto whitespace-pre-wrap text-green-400/80 font-mono text-[11px]"></pre></td></tr>';
       });
       body.innerHTML = html;
     }).catch(function(){
-      body.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-muted">failed to load build history.</td></tr>';
+      body.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-muted">failed to load build history.</td></tr>';
     });
   }
   body.addEventListener('click', function(e){
     var btn = e.target.closest('button.bld-detail');
-    if(!btn) return;
-    var row = btn.closest('tr').nextElementSibling;
-    var pre = row.querySelector('pre');
-    if(!row.classList.contains('hidden')){ row.classList.add('hidden'); return; }
-    row.classList.remove('hidden');
-    pre.textContent = 'loading\u2026';
-    fetch('/api/build/logfile/' + encodeURIComponent(btn.getAttribute('data-id')))
+    if(btn){
+      var row = btn.closest('tr').nextElementSibling;
+      var pre = row.querySelector('pre');
+      if(!row.classList.contains('hidden')){ row.classList.add('hidden'); return; }
+      row.classList.remove('hidden');
+      pre.textContent = 'loading\u2026';
+      fetch('/api/build/logfile/' + encodeURIComponent(btn.getAttribute('data-id')))
+        .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
+        .then(function(t){ pre.textContent = t; })
+        .catch(function(){ pre.textContent = 'log not found'; });
+      return;
+    }
+    var cbtn = e.target.closest('button.bld-copy');
+    if(!cbtn) return;
+    fetch('/api/build/logfile/' + encodeURIComponent(cbtn.getAttribute('data-id')))
       .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
-      .then(function(t){ pre.textContent = t; })
-      .catch(function(){ pre.textContent = 'log not found'; });
+      .then(function(t){ return navigator.clipboard.writeText(t); })
+      .then(function(){
+        cbtn.textContent = 'copied';
+        setTimeout(function(){ cbtn.textContent = 'copy'; }, 1200);
+      })
+      .catch(function(){
+        cbtn.textContent = 'err';
+        setTimeout(function(){ cbtn.textContent = 'copy'; }, 1500);
+      });
   });
   document.getElementById('build-log-refresh').addEventListener('click', load);
   document.getElementById('build-log-clear').addEventListener('click', function(){
