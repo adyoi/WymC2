@@ -485,7 +485,7 @@
   const targetSel = document.getElementById('gen-target');
   const shellSel = document.getElementById('gen-shell-os');
   let shellTouched = false;
-  shellSel.addEventListener('change', () => { shellTouched = true; });
+  let targetTouched = false;
 
   // Keep the Payload shell in sync with the selected target platform (unless
   // the user picked a shell manually): a Win target needs a Win shell one-liner
@@ -496,7 +496,38 @@
     const fam = (targetSel.value || '').startsWith('win_') ? 'win-irm' : 'unix-curl';
     if (shellSel.value !== fam) shellSel.value = fam;
   }
-  targetSel.addEventListener('change', syncShellFromTarget);
+
+  // Payload → Target Platform: when the user picks a Windows payload, snap the
+  // target to the first Windows option; when they pick a Unix payload, snap to
+  // the first Linux option. Extension re-syncs after the target moves.
+  function syncTargetFromShell(){
+    if (targetTouched || !buildCb.checked) return;
+    const isWin = (shellSel.value || '').startsWith('win-');
+    const wantFam = isWin ? 'win' : 'linux';
+    const curFam = (targetSel.value || '').split('_')[0];
+    if (curFam !== wantFam) {
+      const newT = allTargets.find(t => t.v.startsWith(wantFam + '_'));
+      if (newT) targetSel.value = newT.v;
+    }
+  }
+
+  // Target → Payload + Extension: update payload to match the target OS family
+  // (unless the user chose the payload manually) and always refresh the
+  // Extension dropdown presets.
+  function onTargetChange(){
+    targetTouched = true;
+    syncShellFromTarget();
+    const extVisible = extWrap && !extWrap.classList.contains('hidden');
+    if (extVisible) applyExtUI();
+  }
+
+  shellSel.addEventListener('change', () => {
+    shellTouched = true;
+    syncTargetFromShell();
+    const extVisible = extWrap && !extWrap.classList.contains('hidden');
+    if (extVisible) applyExtUI();
+  });
+  targetSel.addEventListener('change', onTargetChange);
   // Compiled langs each support every target: .NET (big-pickle dotnet-install)
   // cross-publishes to win/linux/osx RIDs, Go/Rust/C/C++/Java fire from the
   // corresponding toolchains. Only the extension preset differs (see below).
@@ -571,6 +602,10 @@
   extOther.addEventListener('input', () => { extHidden.value = computeExt(); });
 
   function toggleBuildOptions(){
+    // Language / build-toggle changes re-arm the auto-sync so Payload and
+    // Target Platform realign after the user picked a different runtime.
+    shellTouched = false;
+    targetTouched = false;
     const isCompiled = compiledLangs.includes(langSel.value);
     buildWrap.classList.toggle('hidden', !isCompiled);
     targetWrap.classList.toggle('hidden', !(isCompiled && buildCb.checked));
