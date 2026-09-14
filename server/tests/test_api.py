@@ -318,13 +318,22 @@ def test_agent_source_requires_auth(client):
 
 def test_installer_endpoints_serve_valid_scripts(client):
     # token-authed installer generation works for compiled languages
-    for lang in ("rust", "csharp"):
-        r = client.get(f"/download/agent/{lang}/installer",
-                       params={"token": "test-agent-token"})
-        assert r.status_code == 200, (lang, r.status_code)
-        assert r.headers["X-Installer"] == "bash"
-        assert "--server" in r.text and "--interval" in r.text
-        assert r.text.splitlines()[0].startswith("#!")
+    r = client.get("/download/agent/rust/installer",
+                   params={"token": "test-agent-token"})
+    assert r.status_code == 200
+    assert r.headers["X-Installer"] == "bash"
+    assert "--server" in r.text and "--interval" in r.text
+    assert r.text.splitlines()[0].startswith("#!")
+    # C# requires .NET, which is only offered on Windows targets: unix payloads
+    # are rejected, and the windows (ps1) variant is served instead.
+    r = client.get("/download/agent/csharp/installer",
+                   params={"shell_os": "unix-curl", "token": "test-agent-token"})
+    assert r.status_code == 400
+    r = client.get("/download/agent/csharp/installer",
+                   params={"token": "test-agent-token"})
+    assert r.status_code == 200
+    assert r.headers["X-Installer"] == "powershell"
+    assert "--server" in r.text and "--interval" in r.text
     # clean /agent/{lang}/installer.* URLs stay 404 until a Build Agent run
     # baked the script (no unauthenticated on-demand fallback → no token leak)
     assert client.get("/agent/rust/installer.sh").status_code == 404
