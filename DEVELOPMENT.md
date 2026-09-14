@@ -7,13 +7,71 @@ Build, run and develop the C2 server + agents.
 - Python 3.10+ (server; virtualenvs are created in `server/.venv`).
 - For agent **builder** targets, the matching toolchain is detected at install
   time and required only when you build that language:
-  - Go (`go`), Rust (`cargo`), C/CPP (gcc/clang, MinGW on Windows), C# (`dotnet`),
-    Java (`javac`/`java`), Node (`node`), PowerShell (bundled with Windows),
-    Lua, PHP, Ruby, Perl (runtime must exist on the *target*, not the server).
+  - Go (`go`), Rust (`cargo`), C/CPP (`gcc`/`g++`/`clang` + libcurl + `make` or MinGW on Windows), C# (`dotnet`), Java (`javac`/`java`), Node (`node`), PowerShell (bundled with Windows or `pwsh` on Unix), Lua + `luasocket`, PHP, Ruby, Perl (runtime must exist on the *target*, not the server).
 - Installers **validate** the toolchain and print ready-to-run install commands
-  if something is missing; they do not auto-download toolchains. A kickstart
-  script for .NET lives at the repo root (`dotnet-install.sh`). Builds the
-  server runs live under `server/builds/` (gitignored).
+  if something is missing; they do not auto-download toolchains.
+- A kickstart script for .NET lives at the repo root (`dotnet-install.sh` —
+  see **Installing the .NET SDK on Unix** below). Builds the server runs live
+  under `server/builds/` (gitignored).
+
+### Installing the build toolchains
+
+Each OS installer (`install.ps1` on Windows, `install.sh` on Unix/WSL) probes
+for the binaries listed below and prints exact install commands when one is
+missing. Here is a consolidated reference:
+
+| Tool | Windows `winget` / `scoop`                                | Linux (`apt-get`)                               | macOS (`brew`)                  | Probed by server |
+|------|------------------------------------------------------------|-------------------------------------------------|---------------------------------|------------------|
+| Go   | `winget install GoLang.Go` / `scoop install go`           | `sudo apt-get install golang`                   | `brew install go`               | `go`             |
+| Rust | `winget install Rustlang.Rustup` / `scoop install rustup` | `sudo apt-get install rustc cargo`              | `brew install rust`             | `cargo`          |
+| C/C++| `winget install BrechtSanders.WinLibs.POSIX.UCRT` / `scoop install mingw` | `sudo apt-get install build-essential libcurl4-openssl-dev` | `brew install gcc` / XCode CLT | `gcc`/`g++` or `clang` |
+| .NET | `winget install Microsoft.DotNet.SDK.8` / `scoop install dotnet-sdk` | `sudo apt-get install dotnet-sdk-8.0` | `brew install dotnet` | `dotnet` |
+| Java | `winget install Oracle.JDK` / `scoop install openjdk`     | `sudo apt-get install openjdk-17-jdk`          | `brew install openjdk`          | `javac`          |
+
+### Installing the .NET SDK on Unix
+
+The bundled `dotnet-install.sh` (upstream Microsoft script) installs the SDK to
+`~/.dotnet` with no admin privileges needed. It automatically persists the PATH
+to your shell profile so `dotnet` is available in subsequent shells.
+
+```bash
+./dotnet-install.sh                    # latest LTS SDK
+./dotnet-install.sh --channel 8.0      # specific major version
+./dotnet-install.sh --version 8.0.404  # exact version pin
+```
+
+If `dotnet` is already installed under `~/.dotnet` but is not on `PATH` in the
+current session, both `dotnet-install.sh` and `install.sh` add the export
+automatically and the server probes `~/.dotnet` directly, so builds work even
+before you open a new shell.
+
+### Rust cross-compilation targets
+
+By default Cargo can only build for the host architecture. To cross-compile
+for other platforms, add the target first:
+
+```bash
+rustup target add x86_64-unknown-linux-musl
+rustup target add aarch64-unknown-linux-gnu
+rustup target add x86_64-pc-windows-gnu
+```
+
+### CI toolchain installs (for reference)
+
+The CI pipeline (`ci.yml`) installs toolchains as follows (Ubuntu runners):
+
+| Step | Action |
+|------|--------|
+| Python | `actions/setup-python@v5` + `pip install -r requirements-dev.txt` |
+| Go | `actions/setup-go@v5` |
+| Rust | `dtolnay/rust-toolchain@stable` + `Swatinem/rust-cache@v2` + `apt-get install build-essential libcurl4-openssl-dev libx11-dev libxi-dev libxtst-dev` |
+| C / C++ | Same system libs above; builds with `gcc -O2 ... -lcurl` / `g++ ... -lcurl` |
+| Java | `actions/setup-java@v4` (Temurin 21) |
+| .NET | `actions/setup-dotnet@v4` (`8.0.x`) |
+| Lua | `apt-get install lua5.4` + `luac -p` |
+| PHP | `apt-get install php-cli` |
+| Ruby | `apt-get install ruby` |
+| Perl | `apt-get install perl` |
 
 ## Server
 

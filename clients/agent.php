@@ -1,9 +1,25 @@
 <?php
 // agent.php — C2 agent, PHP port.
 //
-// Run:
-//   php agent.php --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10 --verbose
-//   C2_SERVER=... C2_TOKEN=... php agent.php
+// Port of clients/agent.py with identical CLI flags, task types and result
+// shapes. Wire protocol documented in C2/protocol.md.
+//
+// Usage:
+//   php agent.php --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+//   php agent.php --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+//                 --interval 5 --jitter 2 --verbose
+//
+// Environment variables (accepted when the flag is not given):
+//   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//
+// Flags:
+//   --server URL      server base URL (required unless C2_SERVER is set)
+//   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//   --interval N      heartbeat interval in seconds (default 10, min 1)
+//   --jitter N        random jitter in seconds added to the interval
+//   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+//   --verbose         print activity to stdout
+//   -h, --help        show this help and exit
 //
 // Only use against systems you own or are authorized to test.
 
@@ -1239,7 +1255,20 @@ function execute_task($task) {
 // ----------------------------------------------------------------- main
 
 // Parse command-line arguments
-$args = getopt('', ['server:', 'token:', 'interval:', 'jitter:', 'verbose', 'state:']);
+$args = getopt('h', ['server:', 'token:', 'interval:', 'jitter:', 'verbose', 'state:', 'help']);
+if (isset($args['h']) || isset($args['help'])) {
+    echo "usage: php agent.php --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n";
+    echo "\n";
+    echo "Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):\n";
+    echo "  --server URL      server base URL (required unless C2_SERVER is set)\n";
+    echo "  --token TOKEN     shared agent token (required unless C2_TOKEN is set)\n";
+    echo "  --interval N      heartbeat interval in seconds (default 10, min 1)\n";
+    echo "  --jitter N        random jitter in seconds added to the interval\n";
+    echo "  --state FILE      state file persisting the agent id (default ~/.c2agent.json)\n";
+    echo "  --verbose         print activity to stdout\n";
+    echo "  -h, --help        show this help and exit\n";
+    exit(0);
+}
 $server = $args['server'] ?? getenv('C2_SERVER') ?: '';
 $token = $args['token'] ?? getenv('C2_TOKEN') ?: '';
 $interval = (int)($args['interval'] ?? getenv('C2_INTERVAL') ?: 10);

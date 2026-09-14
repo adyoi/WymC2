@@ -1,9 +1,25 @@
 #!/usr/bin/env ruby
 # agent.rb — C2 agent, Ruby port (stdlib only).
 #
-# Run:
-#   ruby agent.rb --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10 --verbose
-#   C2_SERVER=... C2_TOKEN=... ruby agent.rb
+# Port of clients/agent.py with identical CLI flags, task types and result
+# shapes. Wire protocol documented in C2/protocol.md.
+#
+# Usage:
+#   ruby agent.rb --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+#   ruby agent.rb --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+#                 --interval 5 --jitter 2 --verbose
+#
+# Environment variables (accepted when the flag is not given):
+#   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+#
+# Flags:
+#   --server URL      server base URL (required unless C2_SERVER is set)
+#   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+#   --interval N      heartbeat interval in seconds (default 10, min 1)
+#   --jitter N        random jitter in seconds added to the interval
+#   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+#   --verbose         print activity to stdout
+#   -h, --help        show this help and exit
 #
 # Only use against systems you own or are authorized to test.
 
@@ -1065,6 +1081,10 @@ OptionParser.new do |opts|
   opts.on('--jitter N')      { |v| $jitter = v.to_i }
   opts.on('--verbose')       { $verbose = true }
   opts.on('--state FILE')    { |v| $STATE_FILE = v }
+  opts.on('-h', '--help') do
+    puts opts
+    exit 0
+  end
 end.parse!
 
 $server = ENV['C2_SERVER'] || '' if $server.empty?

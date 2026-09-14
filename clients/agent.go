@@ -1,13 +1,32 @@
 // agent.go — C2 agent, Go port (stdlib only).
 //
+// Port of clients/agent.py with identical CLI flags, task types and result
+// shapes. Wire protocol documented in C2/protocol.md. This port uses the
+// flag package (so -h/--help work out of the box).
+//
 // Build:
 //
 //	go build -o agent agent.go
 //
-// Run:
+// Usage:
 //
-//	./agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10 --jitter 2 --verbose
-//	(token also accepted via C2_TOKEN env var)
+//	./agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+//	./agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+//	    --interval 5 --jitter 2 --verbose
+//
+// Environment variables (accepted when the flag is not given):
+//
+//	C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//
+// Flags:
+//
+//	--server URL      server base URL (required unless C2_SERVER is set)
+//	--token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//	--interval N      heartbeat interval in seconds (default 10, min 1)
+//	--jitter N        random jitter in seconds added to the interval
+//	--state FILE      state file persisting the agent id (default ~/.c2agent_go.json)
+//	--verbose         print activity to stdout
+//	-h, --help        show this help and exit
 //
 // Only use against systems you own or are authorized to test.
 package main
@@ -194,6 +213,30 @@ func homeFile(name string) string {
 		return name
 	}
 	return filepath.Join(home, name)
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func envStr(key string, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func envBool(key string) bool {
+	switch os.Getenv(key) {
+	case "1", "true":
+		return true
+	}
+	return false
 }
 
 func localIP() string {
@@ -1338,10 +1381,10 @@ func execute(t c2Task) resultBody {
 func main() {
 	serverFlag := flag.String("server", os.Getenv("C2_SERVER"), "C2 server URL")
 	tokenFlag := flag.String("token", os.Getenv("C2_TOKEN"), "agent token")
-	intervalFlag := flag.Int("interval", 10, "heartbeat interval in seconds")
-	jitterFlag := flag.Int("jitter", 0, "random jitter in seconds (added to interval)")
-	stateFlag := flag.String("state", homeFile(".c2agent_go.json"), "state file")
-	verboseFlag := flag.Bool("verbose", false, "print activity")
+	intervalFlag := flag.Int("interval", envInt("C2_INTERVAL", 10), "heartbeat interval in seconds")
+	jitterFlag := flag.Int("jitter", envInt("C2_JITTER", 0), "random jitter in seconds (added to interval)")
+	stateFlag := flag.String("state", envStr("C2_STATE_FILE", homeFile(".c2agent_go.json")), "state file")
+	verboseFlag := flag.Bool("verbose", envBool("C2_VERBOSE"), "print activity")
 	flag.Parse()
 
 	if *serverFlag == "" || *tokenFlag == "" {

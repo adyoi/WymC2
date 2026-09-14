@@ -1,9 +1,26 @@
 -- agent.lua — C2 agent, Lua port (requires luasocket).
 --
+-- Port of clients/agent.py with identical CLI flags, task types and result
+-- shapes. Wire protocol documented in C2/protocol.md.
+--
 -- Install: luarocks install luasocket
--- Run:
---   lua agent.lua --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10 --verbose
---   C2_SERVER=... C2_TOKEN=... lua agent.lua
+--
+-- Usage:
+--   lua agent.lua --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+--   lua agent.lua --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+--                 --interval 5 --jitter 2 --verbose
+--
+-- Environment variables (accepted when the flag is not given):
+--   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+--
+-- Flags:
+--   --server URL      server base URL (required unless C2_SERVER is set)
+--   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+--   --interval N      heartbeat interval in seconds (default 10, min 1)
+--   --jitter N        random jitter in seconds added to the interval
+--   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+--   --verbose         print activity to stdout
+--   -h, --help        show this help and exit
 --
 -- Only use against systems you own or are authorized to test.
 
@@ -1396,7 +1413,19 @@ end
 -- Parse command-line arguments
 local i = 1
 while i <= #arg do
-    if arg[i] == "--server" and arg[i + 1] then
+    if arg[i] == "-h" or arg[i] == "--help" then
+        print("usage: lua agent.lua --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]")
+        print("")
+        print("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):")
+        print("  --server URL      server base URL (required unless C2_SERVER is set)")
+        print("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)")
+        print("  --interval N      heartbeat interval in seconds (default 10, min 1)")
+        print("  --jitter N        random jitter in seconds added to the interval")
+        print("  --state FILE      state file persisting the agent id (default ~/.c2agent.json)")
+        print("  --verbose         print activity to stdout")
+        print("  -h, --help        show this help and exit")
+        os.exit(0)
+    elseif arg[i] == "--server" and arg[i + 1] then
         server = arg[i + 1]; i = i + 2
     elseif arg[i] == "--token" and arg[i + 1] then
         token = arg[i + 1]; i = i + 2

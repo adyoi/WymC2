@@ -177,14 +177,40 @@ honour them when present, and fall back to the defaults above otherwise.
 8. **Jitter:** accept `--jitter N` (seconds) and sleep `interval + random(0..N)`.
 9. Send the local IP best-effort (UDP connect to `8.8.8.8:80` trick or equivalent).
 10. Accept the token via `--token` and the `C2_TOKEN` environment variable.
+11. All agents must support the same six environment variables
+    (`C2_SERVER`, `C2_TOKEN`, `C2_INTERVAL`, `C2_JITTER`, `C2_STATE_FILE`,
+    `C2_VERBOSE`) as flag fallbacks and answer `-h`/`--help`.
 
-Reference ports available in `clients/`:
+Reference ports and build commands:
 
-| file        | language    | run / build                                        |
-|-------------|-------------|----------------------------------------------------|
-| `agent.py`  | Python 3.8+ | `pip install requests; python agent.py --server ... --token ...` |
-| `agent.go`  | Go 1.21+    | `go build -o agent agent.go`                       |
-| `agent.cs`  | C# / .NET 6 | `dotnet new console -o a; copy agent.cs a/Program.cs; dotnet build a -o out` |
-| `agent.rs`  | Rust        | see header comment in the file (reqwest + tokio)   |
-| `agent.ps1` | PowerShell 5+ | `powershell -ExecutionPolicy Bypass -File agent.ps1 -Server ... -Token ...` |
-| `agent.sh`  | Bash        | `./agent.sh --server ... --token ...` (needs curl + jq) |
+| file          | language       | run / build command |
+|---------------|----------------|---------------------|
+| `agent.py`    | Python 3.9+    | `pip install requests; python agent.py --server ... --token ...` |
+| `agent.js`    | Node.js        | `node agent.js --server ... --token ...` |
+| `agent.sh`    | Bash           | `./agent.sh --server ... --token ...` (needs curl + jq) |
+| `agent.ps1`   | PowerShell 5+  | `pwsh -File agent.ps1 -Server ... -Token ...` (or `powershell -ExecutionPolicy Bypass -File ...`) |
+| `agent.php`   | PHP CLI        | `php agent.php --server ... --token ...` |
+| `agent.rb`    | Ruby           | `ruby agent.rb --server ... --token ...` |
+| `agent.pl`    | Perl           | `perl agent.pl --server ... --token ...` |
+| `agent.lua`   | Lua 5.x        | `lua agent.lua --server ... --token ...` (needs `luasocket`) |
+| `agent.go`    | Go 1.21+       | `go build -o agent agent.go clone_unix.go keylog_linux.go` |
+| `agent.rs`    | Rust           | `cargo build --release` (needs `reqwest`, `serde`, `rdev`, `hostname`, `rand`) |
+| `agent.c`     | C (gcc/clang + libcurl) | `gcc -O2 -o agent agent.c -lcurl` |
+| `agent.cpp`   | C++ (g++ + libcurl)     | `g++ -O2 -o agent agent.cpp -lcurl` |
+| `agent.cs`    | .NET 8+        | `dotnet build agent.csproj -c Release` |
+| `agent.java`  | JDK 11+        | `javac -encoding UTF-8 agent.java && java Agent` |
+
+### Build toolchains for server-side compilation
+
+The server-side builder (`generate.html` → "build on server") uses:
+
+| Toolchain | Install (Windows)                                          | Install (Linux / WSL)                       | Install (macOS)           | Notes |
+|-----------|------------------------------------------------------------|---------------------------------------------|---------------------------|-------|
+| Go        | `winget install GoLang.Go` / `scoop install go`           | `apt-get install golang`                    | `brew install go`         | |
+| Rust      | `winget install Rustlang.Rustup` / `scoop install rustup` | `apt-get install rustc cargo`               | `brew install rust`       | add targets with `rustup target add` |
+| C / C++   | `winget install BrechtSanders.WinLibs.POSIX.UCRT` / `scoop install mingw` | `apt-get install build-essential libcurl4-openssl-dev` | `brew install gcc` | libcurl headers needed |
+| .NET SDK  | `winget install Microsoft.DotNet.SDK.8` / `scoop install dotnet-sdk` | `apt-get install dotnet-sdk-8.0` or `./dotnet-install.sh` | `brew install dotnet` | C# publishes to all RIDs (win/linux/osx) |
+| Java      | `winget install Oracle.JDK` / `scoop install openjdk`     | `apt-get install openjdk-17-jdk`            | `brew install openjdk`    | JDK 11+ |
+
+On Linux/macOS, the bundled `dotnet-install.sh` can install the SDK to
+`~/.dotnet` without root and persists `PATH` to the shell profile automatically.

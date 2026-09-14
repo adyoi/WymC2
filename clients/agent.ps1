@@ -1,9 +1,9 @@
 <#
-.C2 agent - PowerShell implementation.
+.C2 agent — PowerShell port (Windows PowerShell 5.1+).
 
 Port of clients/agent.py with identical CLI flags, task types and result
-shapes. Target: Windows PowerShell 5.1+ (also runs under pwsh on Linux/macOS,
-with platform-specific behaviour where noted).
+shapes. Wire protocol documented in C2/protocol.md. Also runs under pwsh on
+Linux/macOS, with platform-specific behaviour where noted.
 
 Usage:
     powershell -NoProfile -ExecutionPolicy Bypass -File agent.ps1 ^

@@ -1,9 +1,25 @@
 #!/usr/bin/env perl
 # agent.pl — C2 agent, Perl port (HTTP::Tiny + JSON::PP, both core).
 #
-# Run:
-#   perl agent.pl --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10 --verbose
-#   C2_SERVER=... C2_TOKEN=... perl agent.pl
+# Port of clients/agent.py with identical CLI flags, task types and result
+# shapes. Wire protocol documented in C2/protocol.md.
+#
+# Usage:
+#   perl agent.pl --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+#   perl agent.pl --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+#                 --interval 5 --jitter 2 --verbose
+#
+# Environment variables (accepted when the flag is not given):
+#   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+#
+# Flags:
+#   --server URL      server base URL (required unless C2_SERVER is set)
+#   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+#   --interval N      heartbeat interval in seconds (default 10, min 1)
+#   --jitter N        random jitter in seconds added to the interval
+#   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+#   --verbose         print activity to stdout
+#   -h, --help        show this help and exit
 #
 # Only use against systems you own or are authorized to test.
 
@@ -1194,6 +1210,7 @@ sub execute_task {
 
 # ----------------------------------------------------------------- main
 
+my $show_help = 0;
 GetOptions(
     'server=s'   => \$server,
     'token=s'    => \$token,
@@ -1201,7 +1218,22 @@ GetOptions(
     'jitter=i'   => \$jitter,
     'state=s'    => \$state_file,
     'verbose'    => \$verbose,
+    'help|h'     => \$show_help,
 ) or die "usage: perl agent.pl --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n";
+
+if ($show_help) {
+    print "usage: perl agent.pl --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n";
+    print "\n";
+    print "Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):\n";
+    print "  --server URL      server base URL (required unless C2_SERVER is set)\n";
+    print "  --token TOKEN     shared agent token (required unless C2_TOKEN is set)\n";
+    print "  --interval N      heartbeat interval in seconds (default 10, min 1)\n";
+    print "  --jitter N        random jitter in seconds added to the interval\n";
+    print "  --state FILE      state file persisting the agent id (default ~/.c2agent.json)\n";
+    print "  --verbose         print activity to stdout\n";
+    print "  -h, --help        show this help and exit\n";
+    exit(0);
+}
 
 $server = $ENV{C2_SERVER} // '' unless $server;
 $token  = $ENV{C2_TOKEN}  // '' unless $token;

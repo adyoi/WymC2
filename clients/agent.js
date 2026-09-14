@@ -1,9 +1,25 @@
 #!/usr/bin/env node
 // agent.js — C2 agent, Node.js port (stdlib only).
 //
-// Run:
-//   node agent.js --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10 --verbose
-//   C2_SERVER=... C2_TOKEN=... node agent.js
+// Port of clients/agent.py with identical CLI flags, task types and result
+// shapes. Wire protocol documented in C2/protocol.md.
+//
+// Usage:
+//   node agent.js --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+//   node agent.js --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+//                 --interval 5 --jitter 2 --verbose
+//
+// Environment variables (accepted when the flag is not given):
+//   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//
+// Flags:
+//   --server URL      server base URL (required unless C2_SERVER is set)
+//   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//   --interval N      heartbeat interval in seconds (default 10, min 1)
+//   --jitter N        random jitter in seconds added to the interval
+//   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+//   --verbose         print activity to stdout
+//   -h, --help        show this help and exit
 //
 // Only use against systems you own or are authorized to test.
 
@@ -1163,11 +1179,29 @@ async function executeTask(task) {
 
 // ----------------------------------------------------------------- main
 
+function printUsage() {
+  console.log("usage: node agent.js --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
+  console.log("");
+  console.log("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):");
+  console.log("  --server URL      server base URL (required unless C2_SERVER is set)");
+  console.log("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)");
+  console.log("  --interval N      heartbeat interval in seconds (default 10, min 1)");
+  console.log("  --jitter N        random jitter in seconds added to the interval");
+  console.log("  --state FILE      state file persisting the agent id (default ~/.c2agent.json)");
+  console.log("  --verbose         print activity to stdout");
+  console.log("  -h, --help        show this help and exit");
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   let i = 0;
   while (i < args.length) {
     switch (args[i]) {
+      case "-h":
+      case "--help":
+        printUsage();
+        process.exit(0);
+        break;
       case "--server":
         server = args[++i] || "";
         break;

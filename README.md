@@ -137,8 +137,11 @@ the core of any client-server control plane.
   - Compiled languages can cross-compile on the server (`build on server`),
     generating a pre-built binary the installer fetches directly. Java produces
     a platform-independent **JAR** that the installer runs via `java -jar`; the
-    other compiled languages (Go, Rust, C, C#, C++) produce a native binary per
-    target platform.
+    other compiled languages (Go, Rust, C, C++, **C#/.NET**) produce a native
+    binary per target platform (`win_x64/x86`, `linux_x64/arm64`,
+    `darwin_x64/arm64`). .NET cross-publishes with the matching RID
+    (`win-x64`, `linux-x64`, `osx-arm64`, …) using the SDK installed by
+    `dotnet-install.sh`.
 - **Obfuscate toggle** on the Generate page: encrypts the installer body with
   AES-256-CBC. The key is **kept on the server** and fetched at runtime by the
   target via `/api/obfkey?token=...` (never embedded in the script), so the
@@ -282,7 +285,44 @@ Open `http://127.0.0.1:8000/login` and sign in (port 8001 when started via
 - **Build toolchains** — only for compiling on the server (Generate Agent →
   "build on server") or local builds: `go`, `cargo`, `gcc`/`g++` + libcurl
   headers, the .NET SDK, and a JDK (11+). Installers probe for what is present
-  and skip the rest.
+  and print ready-to-run install commands for what is missing (they never
+  auto-download toolchains).
+
+### Installing the build toolchains
+
+The installers (`install.ps1` / `install.sh`) probe each binary and, when one is
+missing, print the exact command for your platform. Summary table:
+
+| Toolchain | Windows (`winget` / `scoop`)                     | Debian/Ubuntu (`apt-get`) | macOS (`brew`) | Server probes |
+|-----------|--------------------------------------------------|---------------------------|----------------|---------------|
+| Go        | `winget install GoLang.Go` / `scoop install go` | `apt-get install golang`  | `brew install go` | `go` |
+| Rust      | `winget install Rustlang.Rustup` / `scoop install rustup` | `apt-get install rustc cargo` | `brew install rust` | `cargo` |
+| C / C++   | `winget install BrechtSanders.WinLibs.POSIX.UCRT` / `scoop install mingw` | `apt-get install gcc g++` | `brew install gcc` | `gcc`/`g++` or `clang` |
+| .NET SDK  | `winget install Microsoft.DotNet.SDK.8` / `scoop install dotnet-sdk` | `apt-get install dotnet-sdk-8.0` | `brew install dotnet` | `dotnet` |
+| Java JDK  | `winget install Oracle.JDK` / `scoop install openjdk` | `apt-get install openjdk-17-jdk` | `brew install openjdk` | `javac` |
+
+On Linux/macOS/WSL, the **.NET SDK** can also be installed with the bundled
+Microsoft script (no admin required, installs to `~/.dotnet`):
+
+```bash
+./dotnet-install.sh                 # latest LTS SDK, default location
+# or pin a channel / version:
+./dotnet-install.sh --channel 8.0   # 8.0.x SDK
+./dotnet-install.sh --version 8.0.404
+```
+
+It is upstream's `dotnet-install.sh` plus one addition: it appends
+`export PATH="$HOME/.dotnet:$PATH"` to your shell profile (`~/.bashrc`,
+`~/.zshrc`, `~/.kshrc` or `~/.profile`) so `dotnet` resolves in later shells.
+`install.sh` does the same when it finds an SDK under `~/.dotnet` that is not
+yet on `PATH`; the server also probes `~/.dotnet` directly, so a build works
+even before you open a new shell.
+
+Rust cross-compile targets (e.g. `x86_64-unknown-linux-musl` or a Windows GNU
+target) must be installed before "build on server" can target them:
+`rustup target add <target>`. Go, C/C++, and .NET handle their target
+platforms through their own mechanisms (`GOOS`/`GOARCH`, cross-MinGW/clang
+toolchains, dotnet RIDs via `dotnet publish`).
 
 ### Agents
 
@@ -291,16 +331,21 @@ Open `http://127.0.0.1:8000/login` and sign in (port 8001 when started via
 | `agent.py`   | Python 3.9+ + `requests`                | `pynput` optional → enables `keylog`  |
 | `agent.js`   | Node.js (stdlib only)                   | —                                     |
 | `agent.sh`   | Bash + `curl` + `jq`                    | falls back to `python3` for JSON      |
-| `agent.ps1`  | Windows PowerShell 5.1+ / `pwsh`        | AMSI may flag it; exclude its dir while testing |
+| `agent.ps1`  | Windows PowerShell 5.1+ / `pwsh`        | AMSI may flag it; Linux/macOS via `pwsh` |
 | `agent.php`  | PHP CLI                                 | cURL ext preferred, falls back to streams |
 | `agent.rb`   | Ruby (stdlib only)                      | —                                     |
 | `agent.pl`   | Perl (core `HTTP::Tiny` + `JSON::PP`)   | —                                     |
 | `agent.lua`  | Lua 5.x + `luasocket`                   | `luarocks install luasocket`          |
-| `agent.go`   | Go toolchain (compile)                  | —                                     |
-| `agent.rs`   | Cargo / Rust toolchain (compile)        | —                                     |
-| `agent.c` / `agent.cpp` | `gcc`/`g++` + libcurl (compile) | —                                     |
-| `agent.cs`   | .NET SDK 6+ (compile)                   | —                                     |
-| `agent.java` | JDK 11+ (compile; stdlib only)          | builds a cross-platform JAR           |
+| `agent.go`   | Go toolchain (compile)                  | env vars (`C2_*`) + `-h`/`--help` supported |
+| `agent.rs`   | Cargo / Rust toolchain (compile)        | env vars + `-h`/`--help` supported    |
+| `agent.c` / `agent.cpp` | `gcc`/`g++` + libcurl (compile) | env vars + `-h`/`--help` supported   |
+| `agent.cs`   | .NET SDK 8+ (compile)                   | cross-compiles to win/linux/macOS RIDs; env vars + `-h`/`--help` |
+| `agent.java` | JDK 11+ (compile; stdlib only)          | builds a cross-platform JAR; env vars + `-h`/`--help` |
+
+All 14 agents accept the same flags (`-h`/`--help`, `--server`, `--token`,
+`--interval`, `--jitter`, `--state`, `--verbose`) and the same environment
+variables (`C2_SERVER`, `C2_TOKEN`, `C2_INTERVAL`, `C2_JITTER`,
+`C2_STATE_FILE`, `C2_VERBOSE`). Explicit flags always win over env vars.
 
 Optional runtime helpers used by specific tasks:
 
@@ -366,11 +411,14 @@ perl clients/agent.pl     --server http://127.0.0.1:8000 --token <TOKEN> --jitte
 lua  clients/agent.lua    --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
 ```
 
-All agents accept the token via the `C2_TOKEN` environment variable and the
-server URL via `C2_SERVER` (plus `C2_INTERVAL`/`C2_JITTER`/`C2_STATE_FILE`).
-The dashboard **Generate Agent** page builds a ready-to-run one-liner and the
-corresponding installer for you; you normally don't need to run the clients by
-hand.
+All agents — script and compiled alike — accept the same six environment
+variables in addition to their flags: `C2_SERVER`, `C2_TOKEN`, `C2_INTERVAL`,
+`C2_JITTER`, `C2_STATE_FILE`, `C2_VERBOSE`. Explicit flags always win over
+env vars. Every agent also answers `-h` / `--help` with its usage + flags
+(compiled Go/Rust/C/C++/Java/C# implement it explicitly; Python/Node/PowerShell
+use their runtime's built-in parser). The dashboard **Generate Agent** page
+builds a ready-to-run one-liner and the corresponding installer for you; you
+normally don't need to run the clients by hand.
 
 See the header comment of each file for exact build steps.
 

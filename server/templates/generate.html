@@ -497,18 +497,19 @@
     if (shellSel.value !== fam) shellSel.value = fam;
   }
   targetSel.addEventListener('change', syncShellFromTarget);
+  // Compiled langs each support every target: .NET (big-pickle dotnet-install)
+  // cross-publishes to win/linux/osx RIDs, Go/Rust/C/C++/Java fire from the
+  // corresponding toolchains. Only the extension preset differs (see below).
   const compiledLangs = ['go', 'csharp', 'rust', 'c', 'cpp', 'java'];
-  const csharpOnlyWindows = ['csharp'];
 
   const allTargets = [
     {v:'win_x64',l:'Windows x64'},{v:'win_x86',l:'Windows x86'},
     {v:'linux_x64',l:'Linux x64'},{v:'linux_arm64',l:'Linux ARM64'},
     {v:'darwin_x64',l:'macOS x64'},{v:'darwin_arm64',l:'macOS ARM64'}
   ];
-  const winTargets = allTargets.filter(t => t.v.startsWith('win_'));
 
   function rebuildTargets(lang) {
-    const targets = csharpOnlyWindows.includes(lang) ? winTargets : allTargets;
+    const targets = allTargets;
     const curVal = targetSel.value;
     const cur = targets.some(t => t.v === curVal) ? curVal : targets[0].v;
     targetSel.innerHTML = targets.map(t =>

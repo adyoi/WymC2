@@ -1,5 +1,8 @@
 // agent.rs — C2 agent, Rust port (reqwest blocking + serde).
 //
+// Port of clients/agent.py with identical CLI flags, task types and result
+// shapes. Wire protocol documented in C2/protocol.md.
+//
 // Cargo.toml:
 //   [package]
 //   name = "c2agent"
@@ -14,8 +17,22 @@
 //   rdev = { version = "0.5", features = ["unstable_grab"] }
 //
 // Build:  cargo build --release  (binary: target/release/c2agent)
-// Run:
-//   ./c2agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> --interval 10
+// Usage:
+//   ./c2agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+//   ./c2agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+//       --interval 5 --jitter 2 --verbose
+//
+// Environment variables (accepted when the flag is not given):
+//   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//
+// Flags:
+//   --server URL      server base URL (required unless C2_SERVER is set)
+//   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//   --interval N      heartbeat interval in seconds (default 10, min 1)
+//   --jitter N        random jitter in seconds added to the interval
+//   --state FILE      state file persisting the agent id (default ~/.c2agent_rs.json)
+//   --verbose         print activity to stdout
+//   -h, --help        show this help and exit
 //
 // Only use against systems you own or are authorized to test.
 use serde::{Deserialize, Serialize};
@@ -1583,16 +1600,37 @@ fn main() {
     let mut token = String::new();
     let mut interval: u64 = 10;
     let mut jitter: u64 = 0;
+    let mut interval_passed = false;
+    let mut jitter_passed = false;
     let mut state_file: Option<PathBuf> = None;
     let mut verbose = false;
 
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "-h" | "--help" => {
+                println!("usage: c2agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
+                println!();
+                println!("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):");
+                println!("  --server URL      server base URL (required unless C2_SERVER is set)");
+                println!("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)");
+                println!("  --interval N      heartbeat interval in seconds (default 10, min 1)");
+                println!("  --jitter N        random jitter in seconds added to the interval");
+                println!("  --state FILE      state file persisting the agent id (default ~/.c2agent_rs.json)");
+                println!("  --verbose         print activity to stdout");
+                println!("  -h, --help        show this help and exit");
+                std::process::exit(0);
+            }
             "--server" => server = args.next().unwrap_or_default(),
             "--token" => token = args.next().unwrap_or_default(),
-            "--interval" => interval = args.next().and_then(|v| v.parse().ok()).unwrap_or(10),
-            "--jitter" => jitter = args.next().and_then(|v| v.parse().ok()).unwrap_or(0),
+            "--interval" => {
+                interval = args.next().and_then(|v| v.parse().ok()).unwrap_or(10);
+                interval_passed = true;
+            }
+            "--jitter" => {
+                jitter = args.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                jitter_passed = true;
+            }
             "--state" => state_file = Some(args.next().map(PathBuf::from).unwrap_or_default()),
             "--verbose" => verbose = true,
             _ => {}
@@ -1603,6 +1641,32 @@ fn main() {
     }
     if token.is_empty() {
         token = env::var("C2_TOKEN").unwrap_or_default();
+    }
+    if state_file.is_none() {
+        if let Ok(sf) = env::var("C2_STATE_FILE") {
+            if !sf.is_empty() {
+                state_file = Some(PathBuf::from(sf));
+            }
+        }
+    }
+    if !interval_passed {
+        if let Ok(iv) = env::var("C2_INTERVAL") {
+            if let Ok(n) = iv.parse() {
+                interval = n;
+            }
+        }
+    }
+    if !jitter_passed {
+        if let Ok(jt) = env::var("C2_JITTER") {
+            if let Ok(n) = jt.parse() {
+                jitter = n;
+            }
+        }
+    }
+    if let Ok(vb) = env::var("C2_VERBOSE") {
+        if vb == "1" || vb == "true" {
+            verbose = true;
+        }
     }
     if server.is_empty() || token.is_empty() {
         eprintln!("usage: c2agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");

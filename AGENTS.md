@@ -1,8 +1,8 @@
 # AGENTS.md — client / agent guide
 
 All agents speak one wire protocol (`PROTOCOL.md`) over plain HTTP/JSON.
-Script agents share the same CLI flags; every agent must implement the same task
-types with the same result fields.
+Every agent — script and compiled — shares the same CLI flags and must
+implement the same task types with the same result fields.
 
 ## Running an agent
 
@@ -17,8 +17,22 @@ ruby    agent.rb  --server http://HOST:PORT --token TOKEN [--interval 10] [--jit
 bash    agent.sh  --server http://HOST:PORT --token TOKEN [--interval 10] [--jitter 0] [--state FILE] [--verbose]
 ```
 
-Each also accepts the env vars `C2_SERVER`, `C2_TOKEN`, `C2_INTERVAL`,
-`C2_JITTER`, `C2_STATE_FILE` (bash additionally uses `C2_VERBOSE`, `C2_DBG`).
+Compiled agents (`go`, `rust`, `c`, `cpp`, `cs`, `java`) accept the identical
+flags. Every agent also answers `-h` / `--help` with its full usage.
+
+Each agent accepts the same six environment variables as flag fallbacks:
+
+| Env var          | Flag equivalent  | Notes |
+|------------------|------------------|-------|
+| `C2_SERVER`      | `--server`       | base URL of the server |
+| `C2_TOKEN`       | `--token`        | shared agent token |
+| `C2_INTERVAL`    | `--interval`     | heartbeat interval in seconds |
+| `C2_JITTER`      | `--jitter`       | max random jitter added to interval |
+| `C2_STATE_FILE`  | `--state`        | path to the JSON state file (default `~/.c2agent.json`) |
+| `C2_VERBOSE`     | `--verbose`      | set to `1` or `true` for verbose logging |
+
+Explicit flags always win over env vars. Additional env vars recognized by
+`agent.sh` (Bash): `C2_DBG` (extra debug output).
 
 - The server URL should point at the port the server was started with
   (Windows default `8000`, Unix/WSL default `8001`).
@@ -86,7 +100,27 @@ Cross-platform stability is checked live on **Windows** (host) and **Linux**
 
 A new `agent.X` must implement at minimum: register/checkin/result, `shell`,
 `upload`, `download`, and return the same JSON shapes. Keep `--interval`,
-`--jitter`, `--state` and `--verbose` flags identical, persist the id, and
-re-register on a 404. Then add its one-liner/installer wiring in
+`--jitter`, `--state` and `--verbose` flags identical, add `-h`/`--help`,
+accept all six `C2_*` environment variables as flag fallbacks, persist the id,
+and re-register on a 404. Then add its one-liner/installer wiring in
 `server/main.py` (builder helpers + the `AGENT_FILES` map) and the
 `server/templates/generate.html` language picker.
+
+## Server-side build toolchains
+
+The Generate Agent page lets operators cross-compile compiled agents
+(Go, Rust, C, C++, C#, Java) before serving them. The required toolchains
+are detected at install time by `install.ps1` / `install.sh`:
+
+| Toolchain | What the server probes | Install hints |
+|-----------|------------------------|---------------|
+| Go        | `go`                   | `winget install GoLang.Go` / `apt-get install golang` / `brew install go` |
+| Rust      | `cargo`                | `winget install Rustlang.Rustup` / `apt-get install rustc cargo` / `brew install rust` |
+| C / C++   | `gcc` / `g++` / `clang` + libcurl | `winget install BrechtSanders.WinLibs.POSIX.UCRT` / `apt-get install build-essential libcurl4-openssl-dev` / `brew install gcc` |
+| .NET SDK  | `dotnet`               | `winget install Microsoft.DotNet.SDK.8` / `apt-get install dotnet-sdk-8.0` / `brew install dotnet`; Unix: `./dotnet-install.sh` at repo root |
+| Java      | `javac`                | `winget install Oracle.JDK` / `apt-get install openjdk-17-jdk` / `brew install openjdk` |
+
+On Linux/macOS, the bundled `dotnet-install.sh` installs the SDK to
+`~/.dotnet` without root and persists the PATH to the shell profile.
+The server probes `~/.dotnet` directly, so it finds the SDK even before
+a new shell is opened.
