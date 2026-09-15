@@ -20,6 +20,7 @@ server/c2.db
 server/c2_wsl.db
 server/.agent_token
 server/.agent_token_wsl
+server/.csrf_secret
 server/.server.pid
 server/.server.port
 server/.server.pid_wsl

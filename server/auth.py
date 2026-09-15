@@ -17,8 +17,30 @@ SESSION_TTL = 8 * 3600  # 8 hours
 
 _iterations = 200_000
 
-# CSRF secret — random per server instance, not persisted
-_csrf_secret = secrets.token_hex(32)
+# CSRF secret — persisted to a file so the dashboard's CSRF tokens survive
+# server restarts (otherwise every form opened before a restart fails with
+# 403 invalid CSRF token until the page is reloaded).
+_CSRF_SECRET_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".csrf_secret")
+
+
+def _load_csrf_secret() -> str:
+    try:
+        if os.path.exists(_CSRF_SECRET_FILE):
+            val = open(_CSRF_SECRET_FILE, encoding="utf-8").read().strip()
+            if val:
+                return val
+    except OSError:
+        pass
+    secret = secrets.token_hex(32)
+    try:
+        with open(_CSRF_SECRET_FILE, "w", encoding="utf-8") as fh:
+            fh.write(secret)
+    except OSError:
+        pass
+    return secret
+
+
+_csrf_secret = _load_csrf_secret()
 
 
 def generate_csrf_token(session_token: str) -> str:

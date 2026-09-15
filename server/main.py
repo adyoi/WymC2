@@ -1484,13 +1484,6 @@ def generate_post(
 
     installer_shell, payload_kind = _normalize_payload(shell_os)
 
-    # C# agents run on .NET, which is not available on Linux/macOS targets; a
-    # Unix payload would only ever produce a dotnet-script one-liner that can
-    # not run there, so C# stays Windows-only end to end.
-    if language == "csharp" and installer_shell != "windows":
-        raise HTTPException(status_code=400,
-            detail="C# agents require .NET -- only Windows payloads/targets are supported")
-
     # Compact payload + viewable installer source (config embedded).
     # Every config value (server, token, interval, jitter, verbose, shell OS)
     # is baked into the installer script body. The rendered body is stored so
@@ -1975,12 +1968,8 @@ async def download_agent_installer(request: Request, language: str,
     base = server.strip().rstrip("/") or str(request.base_url).rstrip("/")
     raw_shell = request.query_params.get("shell_os", "")
     if not raw_shell:
-        raw_shell = ("win-irm" if language == "csharp" else
-                     "unix" if language in COMPILED_LANGUAGES else "win-irm")
+        raw_shell = "unix" if language in COMPILED_LANGUAGES else "win-irm"
     installer_shell, _ = _normalize_payload(raw_shell)
-    if language == "csharp" and installer_shell != "windows":
-        raise HTTPException(status_code=400,
-            detail="C# agents require .NET -- only Windows payloads/targets are supported")
     body = _build_installer(
         language=language,
         server=base,
@@ -2072,26 +2061,16 @@ def _target_labels(target: str) -> tuple[str, str]:
     return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
 
 
-def _artifact_stem(language: str, target: str) -> str:
-    """Base output name: wym_<lang>_<os>_<arch>. Java jars are platform-
-    independent so they skip the os/arch segment."""
-    if language == "java":
-        return "wym_java"
-    os_label, arch_label = _target_labels(target)
-    return f"wym_{language}_{os_label}_{arch_label}"
-
-
-def _artifact_name(language: str, target: str, ext: str = "", build_id: str = "") -> str:
-    """Uniform output name: wym_<lang>_<os>_<arch>_<build_id><ext>.
+def _artifact_name(language: str, target: str, ext: str = "") -> str:
+    """Uniform output name: wym_<lang>_<os>_<arch><ext> for every language
+    (java included, e.g. wym_java_win_x64.jar).
 
     ext is normalized with a leading dot ('exe' -> '.exe'); empty ext = no
-    extension (Linux/macOS binaries). build_id is a short source-hash suffix
-    that keeps every distinct build a distinct file (java -> wym_java_<id>.jar),
-    so the build cache check is simply 'the file exists'."""
-    stem = _artifact_stem(language, target)
-    if build_id:
-        stem = f"{stem}_{build_id}"
-    return f"{stem}{_norm_ext(ext)}"
+    extension (Linux/macOS binaries). Names are deterministic per lang+target,
+    so the build cache check is 'the file exists AND its .hash marker still
+    matches the current source hash' (stale builds get rebuilt in place)."""
+    os_label, arch_label = _target_labels(target)
+    return f"wym_{language}_{os_label}_{arch_label}{_norm_ext(ext)}"
 
 # Serialize server-side builds. Same-target races would corrupt the build cache;
 # the lock keeps them strictly sequential WITHOUT freezing the event loop (the
@@ -2284,23 +2263,17 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
         return None, f"unknown target: {target}"
     t = BUILD_TARGETS[target]
     ext = t["ext"]
-    # Unique-per-source artifact naming: wym_<lang>_<os>_<arch>_<srcid><ext>
-    # (java keeps a platform-neutral stem). The short source-hash suffix makes
-    # every distinct source a distinct file, so the cheap cache check collapses
-    # to "the file exists". Java jars are cheap to build: they additionally get
-    # a timestamp so every server-side build is its own unique artifact.
-    build_id = _source_hash(language)[:8]
-    if language == "java":
-        id_suffix = f"{build_id}_{time.strftime('%Y%m%d-%H%M%S')}"
-        out_path = BUILDS_DIR / _artifact_name(language, target, ".jar", id_suffix)
-    else:
-        id_suffix = build_id
-        out_path = BUILDS_DIR / _artifact_name(language, target, ext, build_id)
-    hash_path = BUILDS_DIR / f"{_artifact_stem(language, target)}_{id_suffix}.hash"
+    # Deterministic artifact naming: wym_<lang>_<os>_<arch><ext> (java included,
+    # e.g. wym_java_win_x64.jar). Cache correctness relies on the .hash marker:
+    # a build is reused only while its marker still matches the current source
+    # hash; on any source/version change the old file is rebuilt in place.
+    out_path = BUILDS_DIR / _artifact_name(language, target, ".jar" if language == "java" else ext)
+    hash_path = BUILDS_DIR / _artifact_name(language, target, ".hash")
 
-    if language != "java" and out_path.is_file():
+    if out_path.is_file() and hash_path.is_file() and hash_path.read_text().strip() == _source_hash(language):
         note(f"[cache hit] reusing {out_path.name}")
         return out_path, ""
+    out_path.unlink(missing_ok=True)
     hash_path.unlink(missing_ok=True)
 
     src = None
@@ -2719,31 +2692,14 @@ async def download_build(request: Request, language: str, target: str = "win_x64
     t = BUILD_TARGETS.get(target)
     if not t:
         raise HTTPException(status_code=400, detail="unknown target")
-    # on-disk artifact carries the platform default extension plus the source-
-    # id suffix; the served filename may carry a requested (.exe/.scr/.out/…)
-    # extension instead. Java artifacts are unique per build (src-id +
-    # timestamp): serve the newest, or an exact one named via ?name=.
-    build_id = _source_hash(language)[:8]
-    if language == "java":
-        req_name = (request.query_params.get("name") or "").strip()
-        if req_name:
-            p = BUILDS_DIR / req_name
-            if not re.fullmatch(r"wym_java_[0-9a-f]{8}_\d{8}-\d{6}\.jar", req_name) \
-                    or not p.is_file():
-                raise HTTPException(status_code=404, detail="binary not found")
-            path = p
-        else:
-            cands = sorted(BUILDS_DIR.glob(f"wym_java_{build_id}_*.jar"))
-            if not cands:
-                raise HTTPException(status_code=404,
-                                    detail="binary not found — build first")
-            path = cands[-1]
-        fname = path.name
-    else:
-        path = BUILDS_DIR / _artifact_name(language, target, t["ext"], build_id)
-        fname = _artifact_name(language, target, ext or t["ext"], build_id)
-        if not path.is_file():
-            raise HTTPException(status_code=404, detail="binary not found — build first")
+    # On-disk artifact carries the platform default extension (a JAR for java);
+    # the served filename may carry a requested (.exe/.scr/.out/…) extension
+    # instead. Name is deterministic per lang+target: wym_<lang>_<os>_<arch>.
+    disk_ext = ".jar" if language == "java" else t["ext"]
+    path = BUILDS_DIR / _artifact_name(language, target, disk_ext)
+    fname = _artifact_name(language, target, ext or disk_ext)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="binary not found — build first")
     return FileResponse(path, media_type="application/octet-stream", filename=fname)
 
 
@@ -2862,9 +2818,7 @@ def _get_system_info() -> dict:
         "name": "Wym C2",
         "version": app.version,
         "description": "Wym C2 are What you missed is Command and Control Frameworks",
-        "base_url": os.environ.get("C2_HOST", "0.0.0.0") + ":" + str(int(os.environ.get("C2_PORT", "8000"))),
-        "agents_languages": ", ".join(sorted(AGENT_FILES.keys())),
-        "compiled_languages": ", ".join(sorted(COMPILED_LANGUAGES)),
+        "github": "https://github.com/adyoi/WymC2",
     }
 
     # Processor
@@ -3645,7 +3599,7 @@ async def users_create(
     if not auth.authenticate(user, current_password):
         return templates.TemplateResponse(
             request, "users.html",
-            {"user": user, "users": users, "error": "Re-authentication failed — enter your password to manage users", "ok": None},
+            {"user": user, "users": users, "error": f"Re-authentication failed for '{user}' — enter the current password of this account. Forgot it? Restart the server with C2_PASSWORD=<new password> to reset it.", "ok": None},
             status_code=400,
         )
     ok, err = auth.create_user(new_username, new_password)
@@ -3672,7 +3626,7 @@ async def users_delete(request: Request, del_username: str = Form(...), current_
     if not auth.authenticate(user, current_password):
         return templates.TemplateResponse(
             request, "users.html",
-            {"user": user, "users": auth.list_users(), "error": "Re-authentication failed — enter your password to manage users", "ok": None},
+            {"user": user, "users": auth.list_users(), "error": f"Re-authentication failed for '{user}' — enter the current password of this account. Forgot it? Restart the server with C2_PASSWORD=<new password> to reset it.", "ok": None},
             status_code=400,
         )
     if del_username == user:

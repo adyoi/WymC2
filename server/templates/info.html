@@ -16,9 +16,10 @@
     </div>
     <p class="text-sm text-gray-300 mb-4">{{ info.about.description }}</p>
     <table class="w-full text-sm">
-      <tr><td class="text-muted py-1">Listen</td><td class="font-mono text-right">{{ info.about.base_url }}</td></tr>
-      <tr><td class="text-muted py-1">Agent Languages</td><td class="font-mono text-right text-xs">{{ info.about.agents_languages }}</td></tr>
-      <tr><td class="text-muted py-1">Compiled</td><td class="font-mono text-right text-xs">{{ info.about.compiled_languages }}</td></tr>
+      <tr>
+        <td class="text-muted py-1">GitHub</td>
+        <td class="text-right"><a href="{{ info.about.github }}" target="_blank" rel="noopener" class="font-mono text-xs text-accent hover:text-accent-hover underline decoration-accent/40 underline-offset-2">github.com/adyoi/WymC2</a></td>
+      </tr>
     </table>
   </div>
 

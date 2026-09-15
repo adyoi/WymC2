@@ -207,6 +207,32 @@
 <div class="mt-4 bg-red-500/10 border border-red-500/40 rounded-xl px-4 py-3 text-xs font-mono text-red-400 whitespace-pre-wrap break-all">build failed for {{ gen_target | default('win_x64') }}: {{ gen_build_error | e }}</div>
 {% endif %}
 
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mt-10 mb-1">Build Log</h2>
+<div class="flex items-center justify-between mb-3">
+  <p class="text-xs text-muted">persisted in <code class="text-green-400/80">builds/logs</code> — track every build error &amp; fix.</p>
+  <div class="flex items-center gap-2">
+    <button type="button" id="build-log-clear" class="px-3 py-1 text-[10px] font-mono border border-danger/40 text-danger rounded hover:bg-danger/10 hover:border-danger transition cursor-pointer">clear</button>
+    <button type="button" id="build-log-refresh" class="px-3 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">refresh</button>
+  </div>
+</div>
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
+  <table class="w-full text-left font-mono text-xs">
+    <thead class="text-[10px] uppercase tracking-wider text-muted border-b border-dark-400">
+      <tr>
+        <th class="px-3 py-2">time</th>
+        <th class="px-3 py-2">build</th>
+        <th class="px-3 py-2">status</th>
+        <th class="px-3 py-2">duration</th>
+        <th class="px-3 py-2">result</th>
+        <th class="px-3 py-2 text-right">actions</th>
+      </tr>
+    </thead>
+    <tbody id="build-history-body">
+      <tr><td colspan="6" class="px-3 py-4 text-muted" id="build-history-empty">loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
 {% if generated %}
 <div class="mt-6 bg-dark-600 border border-accent/30 rounded-xl overflow-hidden">
   <div class="flex items-center justify-between px-4 py-2.5 border-b border-dark-400">
@@ -305,32 +331,6 @@
 </script>
 {% endif %}
 
-<h2 class="text-sm font-bold text-accent uppercase tracking-wider mt-10 mb-1">Build Log</h2>
-<div class="flex items-center justify-between mb-3">
-  <p class="text-xs text-muted">persisted in <code class="text-green-400/80">builds/logs</code> — track every build error &amp; fix.</p>
-  <div class="flex items-center gap-2">
-    <button type="button" id="build-log-clear" class="px-3 py-1 text-[10px] font-mono border border-danger/40 text-danger rounded hover:bg-danger/10 hover:border-danger transition cursor-pointer">clear</button>
-    <button type="button" id="build-log-refresh" class="px-3 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">refresh</button>
-  </div>
-</div>
-<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
-  <table class="w-full text-left font-mono text-xs">
-    <thead class="text-[10px] uppercase tracking-wider text-muted border-b border-dark-400">
-      <tr>
-        <th class="px-3 py-2">time</th>
-        <th class="px-3 py-2">build</th>
-        <th class="px-3 py-2">status</th>
-        <th class="px-3 py-2">duration</th>
-        <th class="px-3 py-2">result</th>
-        <th class="px-3 py-2 text-right">actions</th>
-      </tr>
-    </thead>
-    <tbody id="build-history-body">
-      <tr><td colspan="6" class="px-3 py-4 text-muted" id="build-history-empty">loading…</td></tr>
-    </tbody>
-  </table>
-</div>
-
 <div id="build-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4" style="display:none">
   <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" id="build-modal-bd"></div>
   <div class="relative flex flex-col w-full max-w-3xl self-center bg-dark-600 border border-dark-400 rounded-xl shadow-2xl overflow-hidden" style="height: min(70vh, 640px);">
@@ -370,7 +370,7 @@
   <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="sfm-backdrop"></div>
   <div class="relative flex flex-col w-full max-w-4xl self-center bg-dark-600 border border-dark-400 rounded-xl shadow-2xl overflow-hidden" style="height: min(78vh, 720px);">
     <div class="flex items-center gap-2 px-4 py-3 border-b border-dark-400 bg-dark-700 flex-shrink-0">
-      <span class="font-mono text-sm text-accent truncate min-w-0">agent source - <span id="src-file-name"></span></span>
+      <span class="font-mono text-sm text-accent truncate min-w-0">Agent Source -> <span id="src-file-name"></span></span>
       <div class="flex items-center gap-2 ml-auto flex-shrink-0">
         <button type="button" id="src-file-copy-btn" class="px-3 py-1 font-mono text-xs bg-dark-800 border border-dark-400 text-muted rounded-lg hover:text-accent hover:border-accent/30 transition cursor-pointer">Copy</button>
         <a id="src-file-dl-btn" download class="px-3 py-1 font-mono text-xs font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer">Download</a>
@@ -558,27 +558,6 @@
     {v:'darwin_x64',l:'macOS x64'},{v:'darwin_arm64',l:'macOS ARM64'}
   ];
 
-  const allPayloads = [
-    {v:'win-irm',l:'Windows (irm)'},{v:'win-iex',l:'Windows (iex)'},
-    {v:'unix-curl',l:'Linux & Darwin (Curl)'},{v:'unix-wget',l:'Linux & Darwin (wget)'}
-  ];
-
-  // C# runs on .NET which is not available on Linux/macOS targets, so its
-  // payload options are Windows-only (win-irm / win-iex), mirroring the
-  // Windows-only target picker above.
-  function payloadsForLang(lang){
-    return lang === 'csharp'
-      ? allPayloads.filter(p => p.v.startsWith('win-'))
-      : allPayloads;
-  }
-  function rebuildPayloads(lang){
-    const opts = payloadsForLang(lang);
-    const cur = opts.some(o => o.v === shellSel.value) ? shellSel.value : opts[0].v;
-    shellSel.innerHTML = opts.map(o =>
-      `<option value="${o.v}" ${o.v===cur?'selected':''}>${o.l}</option>`
-    ).join('');
-  }
-
   function rebuildTargets(lang) {
     const targets = targetsForLang(lang);
     const curVal = targetSel.value;
@@ -648,7 +627,6 @@
     const showExt = isCompiled && buildCb.checked && langSel.value !== 'java';
     extWrap.classList.toggle('hidden', !showExt);
     rebuildTargets(langSel.value);
-    rebuildPayloads(langSel.value);
     if(showExt) applyExtUI();
   }
 
