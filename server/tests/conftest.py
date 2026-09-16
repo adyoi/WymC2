@@ -10,15 +10,15 @@ from pathlib import Path
 
 import pytest
 
-_TMP = Path(tempfile.mkdtemp(prefix="c2test_"))
-os.environ["C2_DB_PATH"] = str(_TMP / "test.db")
-os.environ["C2_AGENT_TOKEN"] = "test-agent-token"
-os.environ["C2_RETRY_AFTER"] = "1"
-os.environ["C2_STALE_AFTER"] = "5"
-os.environ["C2_USER"] = "admin"
-os.environ["C2_PASSWORD"] = "testpass"
-os.environ["C2_API_DOCS"] = "1"
-os.environ.pop("C2_EXPLORER_UNRESTRICTED", None)
+_TMP = Path(tempfile.mkdtemp(prefix="wymtest_"))
+os.environ["WYM_DB_PATH"] = str(_TMP / "test.db")
+os.environ["WYM_AGENT_TOKEN"] = "test-agent-token"
+os.environ["WYM_RETRY_AFTER"] = "1"
+os.environ["WYM_STALE_AFTER"] = "5"
+os.environ["WYM_USER"] = "admin"
+os.environ["WYM_PASSWORD"] = "testpass"
+os.environ["WYM_API_DOCS"] = "1"
+os.environ.pop("WYM_EXPLORER_UNRESTRICTED", None)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -26,7 +26,7 @@ import database  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from main import app  # noqa: E402
 
-AGENT_HEADERS = {"X-Agent-Token": os.environ["C2_AGENT_TOKEN"]}
+AGENT_HEADERS = {"X-Agent-Token": os.environ["WYM_AGENT_TOKEN"]}
 
 
 @pytest.fixture(scope="session")

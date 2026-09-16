@@ -16,6 +16,8 @@ ENV/
 .pytest_cache
 
 # Server data
+server/wym.db
+server/wym_wsl.db
 server/c2.db
 server/c2_wsl.db
 server/.agent_token
@@ -37,7 +39,7 @@ server/collected/*
 !server/collected/.gitkeep
 
 # Agent state + local runtime artifacts
-clients/.c2agent.json
+clients/.wymagent.json
 clients/*.log
 clients/*.err.log
 clients/agent.exe

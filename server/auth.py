@@ -10,9 +10,9 @@ from database import get_conn, utcnow
 # Cookie names are port-scoped so multiple server instances (Windows 8000,
 # Linux/WSL 8001) running on the same host (127.0.0.1) in one browser do not
 # overwrite each other's session cookie.
-_COOKIE_PORT = os.environ.get("C2_PORT", "8000")
-COOKIE_NAME = f"c2_session_{_COOKIE_PORT}"
-CSRF_COOKIE_NAME = f"c2_csrf_{_COOKIE_PORT}"
+_COOKIE_PORT = os.environ.get("WYM_PORT", "8000")
+COOKIE_NAME = f"wym_session_{_COOKIE_PORT}"
+CSRF_COOKIE_NAME = f"wym_csrf_{_COOKIE_PORT}"
 SESSION_TTL = 8 * 3600  # 8 hours
 
 _iterations = 200_000
@@ -77,7 +77,7 @@ def verify_password(password: str, stored: str) -> bool:
 
 def sync_default_user(username: str, password: str = "") -> tuple[bool, str]:
     """Create the bootstrap dashboard user, and if `password` is non-empty,
-    (re)set it on every startup so a reinstall with C2_PASSWORD always logs in
+    (re)set it on every startup so a reinstall with WYM_PASSWORD always logs in
     with that password (never a stale/random one).
 
     Returns (created_or_updated, effective_password).
@@ -116,7 +116,7 @@ def authenticate(username: str, password: str) -> bool:
     if row is None:
         # burn the same PBKDF2 cost so user enumeration via timing is not feasible
         hashlib.pbkdf2_hmac(
-            "sha256", password.encode("utf-8"), b"c2-salt", _iterations
+            "sha256", password.encode("utf-8"), b"wym-salt", _iterations
         )
         return False
     return verify_password(password, row["password_hash"])

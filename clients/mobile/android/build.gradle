@@ -1,0 +1,18 @@
+// Top-level build file. Requires Gradle 8.x (AGP 8.2+) and an Android SDK at
+// ANDROID_HOME with platform / build-tools installed. The server detects
+// 'gradle' on PATH and ANDROID_HOME; both are mandated before it builds.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.2.2"
+    }
+}
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}

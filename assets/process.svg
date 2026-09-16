@@ -97,7 +97,7 @@
 
   <!-- 10 idle note -->
   <rect class="pill" x="361" y="685" width="558" height="20"/>
-  <text class="tD" x="640" y="700">sleep interval &#177; jitter &#183; unacked tasks re-sent after C2_RETRY_AFTER</text>
+  <text class="tD" x="640" y="700">sleep interval &#177; jitter &#183; unacked tasks re-sent after WYM_RETRY_AFTER</text>
 
   <!-- lateral movement -->
   <text x="30" y="730" class="sec">— LATERAL MOVEMENT —</text>
@@ -105,7 +105,7 @@
   <!-- 11 lateral task (sd) -->
   <line class="sd" x1="520" y1="768" x2="806" y2="768" marker-end="url(#ad)"/>
   <rect class="pill" x="392" y="780" width="480" height="20"/>
-  <text class="tM" x="632" y="795">lateral task {subnet} + creds (C2_LAT_USER / C2_LAT_PASS)</text>
+  <text class="tM" x="632" y="795">lateral task {subnet} + creds (WYM_LAT_USER / WYM_LAT_PASS)</text>
 
   <!-- 12 lateral execute box -->
   <rect class="box" x="675" y="818" width="270" height="72"/>

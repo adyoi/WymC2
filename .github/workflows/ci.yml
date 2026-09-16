@@ -56,8 +56,8 @@ jobs:
       - name: Go build (linux + windows, explicit files)
         run: |
           cd clients
-          go build -o /tmp/c2agent-linux agent.go clone_unix.go keylog_linux.go
-          GOOS=windows go build -o /tmp/c2agent-win.exe agent.go clone_windows.go keylog_windows.go
+          go build -o /tmp/wymagent-linux agent.go clone_unix.go keylog_linux.go
+          GOOS=windows go build -o /tmp/wymagent-win.exe agent.go clone_windows.go keylog_windows.go
 
   compiled-agents:
     name: Compiled agents
@@ -71,9 +71,9 @@ jobs:
       - name: Rust (cargo)
         run: cargo build --release --manifest-path clients/Cargo.toml
       - name: C
-        run: gcc -Wall -O2 -o /tmp/c2agent-c clients/agent.c -lcurl
+        run: gcc -Wall -O2 -o /tmp/wymagent-c clients/agent.c -lcurl
       - name: C++
-        run: g++ -Wall -O2 -o /tmp/c2agent-cpp clients/agent.cpp -lcurl
+        run: g++ -Wall -O2 -o /tmp/wymagent-cpp clients/agent.cpp -lcurl
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

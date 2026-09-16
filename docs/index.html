@@ -3,8 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#030805">
 <title>WYM C2 — What you missed is Command and Control Frameworks</title>
-<meta name="description" content="WYM C2 — a plain HTTP/JSON command and control framework written across 14 runtimes. One wire protocol, one dashboard, agents in Python, Node.js, Go, Rust, C, C++, C#, Java and more.">
+<meta name="description" content="WYM C2 — a plain HTTP/JSON command and control framework written across 16 runtimes. One wire protocol, one dashboard, agents in Python, Node.js, Go, Rust, C, C++, C#, Java, Android and iOS.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23030805'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='17' font-weight='bold' fill='%2300ff88' text-anchor='middle'%3E_%3C/text%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="WYM C2">
+<meta property="og:title" content="WYM C2 — What you missed is Command and Control Frameworks">
+<meta property="og:description" content="One wire protocol, one dashboard. A plain HTTP/JSON command and control framework written across 16 runtimes.">
+<meta property="og:url" content="https://adyoi.github.io/WymC2/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="WYM C2 — Command and Control Frameworks">
+<meta name="twitter:description" content="16 runtimes, 5 OS families, a server-side cross-compiling builder. One wire protocol, one dashboard.">
 <style>
   :root {
     --bg: #030805;
@@ -184,8 +194,34 @@
   footer .wrap { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
   footer .mono { color: var(--green-dim); }
 
+  /* ── stat strip (hero) ────────────────────────────────────── */
+  .stat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: clamp(18px, 6vw, 56px); margin-top: 30px; }
+  .stat b { display: block; font-size: clamp(20px, 4vw, 30px); color: var(--green); text-shadow: var(--glow); }
+  .stat span { font-size: 10.5px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+
+  /* ── protocol lifecycle steps ─────────────────────────────── */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .step { background: rgba(0,0,0,.35); border: 1px solid var(--line); border-left: 3px solid var(--green-dark); border-radius: 10px; padding: 12px 14px; }
+  .step b { display: block; color: var(--green-dim); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+  .step p { font-size: 11.5px; color: var(--muted); }
+  .step code { color: var(--cyan); }
+
+  /* ── env fallback table ───────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--green-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+  td code { color: var(--cyan); font-size: 11.5px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    #matrix { display: none; }
+  }
+
   @media (max-width: 640px) {
-    nav ul { display: none; }
+    nav .wrap { flex-wrap: wrap; gap: 4px 14px; height: auto; padding: 10px 0; }
+    nav ul { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; }
+    nav ul a { font-size: 11px; }
     header { padding: 64px 0 48px; }
     .g2 { grid-template-columns: 1fr; }
   }
@@ -202,6 +238,7 @@
       <li><a href="#why">Why</a></li>
       <li><a href="#tasks">Capabilities</a></li>
       <li><a href="#languages">Languages</a></li>
+      <li><a href="#builds">Build</a></li>
       <li><a href="#protocol">Protocol</a></li>
       <li><a href="#quickstart">Quickstart</a></li>
     </ul>
@@ -212,13 +249,19 @@
   <div class="wrap">
     <div class="kicker">// What you missed is Command and Control Frameworks</div>
     <h1>WYM C2</h1>
-    <div class="tagline">One wire protocol. One dashboard. Agents in 14 runtimes across Windows, Linux and macOS.</div>
+    <div class="tagline">One wire protocol. One dashboard. Agents in 16 runtimes across Windows, Linux, macOS, Android and iOS.</div>
     <div class="typed-row">
       <div class="typed" id="typed"></div>
     </div>
     <div class="hero-cta">
       <a class="btn" href="https://github.com/adyoi/WymC2" target="_blank" rel="noopener">View on GitHub</a>
       <a class="btn ghost" href="#quickstart">Install &amp; Run</a>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><b>16</b><span>runtimes</span></div>
+      <div class="stat"><b>5</b><span>OS families</span></div>
+      <div class="stat"><b>12</b><span>task types</span></div>
+      <div class="stat"><b>8</b><span>compiled targets</span></div>
     </div>
   </div>
 </header>
@@ -230,7 +273,7 @@
     <div class="grid g2">
       <div class="card">
         <h3>Plain HTTP / JSON wire</h3>
-        <p>Every agent — script or compiled — speaks the same protocol over plain HTTP/JSON: <code>register → checkin → tasks → result</code>. A single spec keeps 14 language implementations interoperable with zero extra dependencies.</p>
+        <p>Every agent — script or compiled — speaks the same protocol over plain HTTP/JSON: <code>register → checkin → tasks → result</code>. A single spec keeps 16 language implementations interoperable with zero extra dependencies.</p>
       </div>
       <div class="card">
         <h3>Persistent identity, graceful recovery</h3>
@@ -242,7 +285,7 @@
       </div>
       <div class="card">
         <h3>Server-side cross-compile</h3>
-        <p>Build compiled agents straight from the dashboard — Go, Rust, C, C++, C#, Java — targeting <code>win_x64</code>, <code>win_x86</code>, <code>linux_x64</code>, <code>linux_arm64</code>, <code>macos_x64</code>, <code>macos_arm64</code>. Deterministic artifacts: <code>wym_&lt;lang&gt;_&lt;os&gt;_&lt;arch&gt;.&lt;ext&gt;</code>.</p>
+        <p>Build compiled agents straight from the dashboard — Go, Rust, C, C++, C#, Java — targeting <code>win_x64</code>, <code>win_x86</code>, <code>linux_x64</code>, <code>linux_arm64</code>, <code>macos_x64</code>, <code>macos_arm64</code>. Deterministic artifacts: <code>wym_&lt;lang&gt;_&lt;os&gt;_&lt;arch&gt;.&lt;ext&gt;</code>. Mobile packages too: Android <code>.apk</code> and iOS <code>.ipa</code>.</p>
       </div>
     </div>
   </section>
@@ -266,7 +309,7 @@
   </section>
 
   <section id="languages">
-    <div class="sec-head"><span class="sig">//</span><h2>14 runtimes, one contract</h2><span class="line"></span></div>
+    <div class="sec-head"><span class="sig">//</span><h2>16 runtimes, one contract</h2><span class="line"></span></div>
     <div class="card">
       <h3>Scripted agents</h3>
       <div class="chips">
@@ -284,10 +327,36 @@
       </div>
       <p style="margin-top:12px;">Targets are validated against the platform: C# binaries build only for Windows (<code>wym_csharp_win_x64.exe</code> / <code>wym_csharp_win_x86.exe</code>). Every artifact is named <code>wym_&lt;lang&gt;_&lt;os&gt;_&lt;arch&gt;.&lt;ext&gt;</code>.</p>
     </div>
+    <div class="card" style="margin-top:14px;">
+      <h3>Mobile agents — APK / IPA from the dashboard</h3>
+      <div class="chips">
+        <span class="chip compiled">android&nbsp;apk</span><span class="chip compiled">ios&nbsp;ipa</span>
+      </div>
+      <p style="margin-top:12px;">Android builds need Gradle + the Android SDK on the server; iOS requires macOS with Xcode. Both accept a custom artifact name and a disguise launcher icon (PDF &middot; DOCX &middot; XLSX &middot; PPTX &middot; ZIP &middot; RAR).</p>
+    </div>
+  </section>
+
+  <section id="builds">
+    <div class="sec-head"><span class="sig">//</span><h2>Build &amp; deploy</h2><span class="line"></span></div>
+    <div class="grid g3">
+      <div class="card"><h3>Cross-compile from the dashboard</h3><p>Pick a compiled language and target in <b>Generate Agent</b>; the server builds on the fly and streams the binary for download. Toolchains are detected at install time.</p></div>
+      <div class="card"><h3>Deterministic artifacts</h3><p>Every build is named <code>wym_&lt;lang&gt;_&lt;os&gt;_&lt;arch&gt;.&lt;ext&gt;</code> and cached behind a source hash — unchanged sources never recompile.</p></div>
+      <div class="card"><h3>Mobile builds (APK / IPA)</h3><p>Android <code>wym_android.apk</code> via Gradle + Android SDK, iOS <code>wym_ios.ipa</code> on macOS with Xcode. Custom artifact name + disguise icon (PDF/DOCX/XLSX/PPTX/ZIP/RAR) per build; a missing toolchain fails fast with a clear message.</p></div>
+      <div class="card"><h3>Runtime bundles</h3><p>Windows C/C++/Rust builds ship with their runtime DLLs; Java compiles to an executable jar (<code>wym_java_&lt;os&gt;_&lt;arch&gt;.jar</code>) tuned for <code>--release 11</code>, so it runs on any JRE 9+.</p></div>
+      <div class="card"><h3>Platform-aware targets</h3><p>Targets are validated against the platform: C# binaries build only for Windows (<code>wym_csharp_win_x64.exe</code> / <code>wym_csharp_win_x86.exe</code>).</p></div>
+      <div class="card"><h3>Service installers</h3><p><code>agent-service.ps1</code> and <code>agent-service.sh</code> turn any source into a Windows scheduled task / <code>sc</code> service, systemd or cron unit — persistence-ready but opt-in.</p></div>
+      <div class="card"><h3>Build log &amp; health</h3><p>Compiles stream live logs to the dashboard, report duration and consume a sticky cache — an artifact status icon turns green only when the invoked toolchain exits 0.</p></div>
+    </div>
   </section>
 
   <section id="protocol">
     <div class="sec-head"><span class="sig">//</span><h2>The wire protocol</h2><span class="line"></span></div>
+    <div class="steps">
+      <div class="step"><b>01 · Register</b><p>Agent posts its fingerprint; the server issues a persistent <code>agent_id</code>.</p></div>
+      <div class="step"><b>02 · Check in</b><p>Heartbeat every <code>interval ± jitter</code>; server queues any pending tasks.</p></div>
+      <div class="step"><b>03 · Execute</b><p>Agent runs the task, bounded by its per-task timeout.</p></div>
+      <div class="step"><b>04 · Report</b><p>Result (output, exit code, error) is posted and acknowledged server-side.</p></div>
+    </div>
     <div class="proto">
       <div class="l"><span class="req">POST /api/register</span> — hostname, username, os, arch, pid, ip, type, version <span class="cells">→ agent_id (persist it)</span></div>
       <div class="l"><span class="req">POST /api/checkin</span> — <b>{agent_id}</b> every interval ± jitter <span class="cells">→ {tasks: [...]}</span></div>
@@ -312,8 +381,17 @@
 <span class="pf">$</span> node   agent.js  --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
 <span class="pf">$</span> go run agent.go   --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
 
-<span class="cm"># Flags have env-var fallbacks:  C2_SERVER C2_TOKEN C2_INTERVAL C2_JITTER C2_STATE_FILE C2_VERBOSE</span>
-<span class="pf">$</span> C2_SERVER=http://127.0.0.1:8000 C2_TOKEN=YOUR_AGENT_TOKEN python agent.py</pre>
+<span class="cm"># Flags have env-var fallbacks:  WYM_SERVER WYM_TOKEN WYM_INTERVAL WYM_JITTER WYM_STATE_FILE WYM_VERBOSE</span>
+<span class="pf">$</span> WYM_SERVER=http://127.0.0.1:8000 WYM_TOKEN=YOUR_AGENT_TOKEN python agent.py</pre>
+    <table>
+      <tr><th>Env var</th><th>Flag</th><th>Fallback notes</th></tr>
+      <tr><td><code>WYM_SERVER</code></td><td><code>--server</code></td><td>base URL of the server</td></tr>
+      <tr><td><code>WYM_TOKEN</code></td><td><code>--token</code></td><td>shared agent token</td></tr>
+      <tr><td><code>WYM_INTERVAL</code></td><td><code>--interval</code></td><td>heartbeat interval in seconds</td></tr>
+      <tr><td><code>WYM_JITTER</code></td><td><code>--jitter</code></td><td>max random jitter added to the interval</td></tr>
+      <tr><td><code>WYM_STATE_FILE</code></td><td><code>--state</code></td><td>JSON state path (default <code>~/.wymagent.json</code>)</td></tr>
+      <tr><td><code>WYM_VERBOSE</code></td><td><code>--verbose</code></td><td>set to <code>1</code> or <code>true</code></td></tr>
+    </table>
     <blockquote class="warn" style="margin-top:18px;">
       <b>Authorized use only.</b> This is a dual-use security framework. Use it exclusively against
       systems you own or with explicit written authorization. It ships <b>no evasion and no stealth</b> —
@@ -325,13 +403,15 @@
 
 <footer>
   <div class="wrap">
-    <span class="mono">WYM C2 — What you missed is Command and Control Frameworks</span>
-    <span><a href="https://github.com/adyoi/WymC2" target="_blank" rel="noopener">Github</a> · <a href="https://github.com/adyoi/WymC2/blob/master/LICENSE" target="_blank" rel="noopener">LICENSE</a></span>
+    <span class="mono">WYM C2 — What you missed is Command and Control Frameworks · v0.1.0</span>
+    <span><a href="https://github.com/adyoi/WymC2" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/adyoi/WymC2/blob/master/LICENSE" target="_blank" rel="noopener">LICENSE</a> · <span id="yr"></span></span>
   </div>
 </footer>
 
 <script>
 (function () {
+  var yr = document.getElementById('yr'); if (yr) yr.textContent = '\u00a9 ' + new Date().getFullYear();
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   // ── matrix rain ─────────────────────────────────────────────
   var canvas = document.getElementById('matrix');
   var ctx = canvas.getContext('2d');
@@ -357,11 +437,11 @@
       drops[i]++;
     }
   }
-  setInterval(rain, 46);
+  if (reduced) { canvas.style.display = 'none'; } else { setInterval(rain, 46); }
 
   // ── terminal typing effect ──────────────────────────────────
   var lines = [
-    ['$ ', 'wym-c2', ' --connect'],
+    ['$ ', 'wym-wym', ' --connect'],
     ['', '  < ok > server reachable at http://127.0.0.1:8000'],
     ['', '  < + > agent registered :: id e83a9f2c4d1b7aa0'],
     ['', '  < + > task delivered :: shell "whoami"'],
@@ -388,8 +468,12 @@
       ci = 0; li++;
     }
   }
-  setInterval(type, li === 0 ? 0 : 26);
-  type();
+  if (reduced) {
+    el.innerHTML = lines.map(function (l) { return l[0] ? l[0] + '<span class="ok">' + l[1] + '</span>' : l[1]; }).join('\n');
+  } else {
+    setInterval(type, 26);
+    type();
+  }
 })();
 </script>
 </body>

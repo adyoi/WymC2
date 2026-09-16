@@ -21,13 +21,13 @@ Usage: ./uninstall.sh [--force]
 
 Removes (Linux/macOS/WSL artifacts only):
   server/.venv-wsl                        (virtualenv)
-  server/c2_wsl.db                        (database)
+  server/wym_wsl.db                        (database)
   server/.agent_token_wsl                 (agent token)
   server/.server.pid_wsl, .server.port_wsl
   server/server_wsl.log
   server/builds and __pycache__ dirs      (build artifacts; builds/ is shared)
 
-Windows artifacts (.venv, c2.db, .agent_token, .server.pid/.server.port,
+Windows artifacts (.venv, wym.db, .agent_token, .server.pid/.server.port,
 server.log) are left untouched.
 EOF
 }
@@ -116,7 +116,7 @@ rm_file "$PIDFILE"
 rm_file "$PORTFILE"
 rm_file "$SERVER/server_wsl.log"
 rm_file "$SERVER/.agent_token_wsl"
-rm_file "$SERVER/c2_wsl.db"
+rm_file "$SERVER/wym_wsl.db"
 rm_dir "$SERVER/.venv-wsl"
 rm_dir "$SERVER/builds"
 

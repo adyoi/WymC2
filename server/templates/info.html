@@ -24,6 +24,14 @@
   </div>
 
   <div class="bg-dark-600 border border-dark-400 rounded-xl p-5">
+    <h2 class="text-xs font-bold text-accent uppercase tracking-wider mb-3 pb-2 border-b border-dark-400">Uptime</h2>
+    <table class="w-full text-sm">
+      <tr><td class="text-muted py-1">Boot Time</td><td class="font-mono text-right">{{ info.boot_time }}</td></tr>
+      <tr><td class="text-muted py-1">Uptime</td><td class="font-mono text-right">{{ info.uptime_days }}d {{ info.uptime_hours }}h {{ info.uptime_minutes }}m</td></tr>
+    </table>
+  </div>
+
+  <div class="bg-dark-600 border border-dark-400 rounded-xl p-5">
     <h2 class="text-xs font-bold text-accent uppercase tracking-wider mb-3 pb-2 border-b border-dark-400">Operating System</h2>
     <table class="w-full text-sm">
       <tr><td class="text-muted py-1">Platform</td><td class="font-mono text-right">{{ info.os_platform }}</td></tr>
@@ -32,21 +40,6 @@
       <tr><td class="text-muted py-1">Run As</td><td class="font-mono text-right">{{ info.username }}</td></tr>
       <tr><td class="text-muted py-1">Python</td><td class="font-mono text-right">{{ info.python_version }}</td></tr>
     </table>
-  </div>
-
-  <div class="bg-dark-600 border border-dark-400 rounded-xl p-5">
-    <h2 class="text-xs font-bold text-accent uppercase tracking-wider mb-3 pb-2 border-b border-dark-400">Processor</h2>
-    <table class="w-full text-sm">
-      <tr><td class="text-muted py-1">Physical Cores</td><td class="font-mono text-right">{{ info.cpu_count }}</td></tr>
-      <tr><td class="text-muted py-1">Logical Cores</td><td class="font-mono text-right">{{ info.cpu_count_logical }}</td></tr>
-      {% if info.cpu_freq %}
-      <tr><td class="text-muted py-1">Frequency</td><td class="font-mono text-right">{{ "%.0f"|format(info.cpu_freq.current) }} MHz</td></tr>
-      {% endif %}
-      <tr><td class="text-muted py-1">Usage</td><td class="font-mono text-right">{{ info.cpu_percent }}%</td></tr>
-    </table>
-    <div class="mt-2 h-2 bg-dark-800 rounded-full overflow-hidden">
-      <div class="h-full bg-gradient-to-r from-accent/80 to-accent rounded-full transition-all" style="width:{{ info.cpu_percent }}%"></div>
-    </div>
   </div>
 
   <div class="bg-dark-600 border border-dark-400 rounded-xl p-5">
@@ -70,11 +63,18 @@
   </div>
 
   <div class="bg-dark-600 border border-dark-400 rounded-xl p-5">
-    <h2 class="text-xs font-bold text-accent uppercase tracking-wider mb-3 pb-2 border-b border-dark-400">Uptime</h2>
+    <h2 class="text-xs font-bold text-accent uppercase tracking-wider mb-3 pb-2 border-b border-dark-400">Processor</h2>
     <table class="w-full text-sm">
-      <tr><td class="text-muted py-1">Boot Time</td><td class="font-mono text-right">{{ info.boot_time }}</td></tr>
-      <tr><td class="text-muted py-1">Uptime</td><td class="font-mono text-right">{{ info.uptime_days }}d {{ info.uptime_hours }}h {{ info.uptime_minutes }}m</td></tr>
+      <tr><td class="text-muted py-1">Physical Cores</td><td class="font-mono text-right">{{ info.cpu_count }}</td></tr>
+      <tr><td class="text-muted py-1">Logical Cores</td><td class="font-mono text-right">{{ info.cpu_count_logical }}</td></tr>
+      {% if info.cpu_freq %}
+      <tr><td class="text-muted py-1">Frequency</td><td class="font-mono text-right">{{ "%.0f"|format(info.cpu_freq.current) }} MHz</td></tr>
+      {% endif %}
+      <tr><td class="text-muted py-1">Usage</td><td class="font-mono text-right">{{ info.cpu_percent }}%</td></tr>
     </table>
+    <div class="mt-2 h-2 bg-dark-800 rounded-full overflow-hidden">
+      <div class="h-full bg-gradient-to-r from-accent/80 to-accent rounded-full transition-all" style="width:{{ info.cpu_percent }}%"></div>
+    </div>
   </div>
 
   <div class="bg-dark-600 border border-dark-400 rounded-xl p-5">

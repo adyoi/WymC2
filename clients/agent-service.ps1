@@ -29,7 +29,7 @@
 
   # Any other script agent
   agent-service.ps1 install -Server http://127.0.0.1:8000 -Token <TOKEN> -Agent clients\agent.go -Build
-  agent-service.ps1 install -Server http://127.0.0.1:8000 -Token <TOKEN> -Agent C:\tools\c2agent.exe
+  agent-service.ps1 install -Server http://127.0.0.1:8000 -Token <TOKEN> -Agent C:\tools\wymagent.exe
   agent-service.ps1 install -Server http://127.0.0.1:8000 -Token <TOKEN> -Agent clients\agent.c -Build
 
   # Quick management
@@ -72,11 +72,11 @@ $AgentFile = if ($AgentScript) { $AgentScript } else { Join-Path $Root "agent.py
 [String]$ServiceDesc = "Wym C2 are What you missed is Command and Control Frameworks"
 $ServiceName = ""          # resolved at install / detection time
 $TaskName = ""             # resolved at install / detection time
-$LegacyNames = @("C2Agent", "c2agent")
+$LegacyNames = @("C2Agent", "wymagent")
 
-$WatchFile = Join-Path $Root "c2agent-watch.ps1"
+$WatchFile = Join-Path $Root "wymagent-watch.ps1"
 $WatchLog = Join-Path $Root "C2Agent.log"
-$WatchPidFile = Join-Path $Root ".c2agent-watch.pid"
+$WatchPidFile = Join-Path $Root ".wymagent-watch.pid"
 
 function Write-Line($msg) { Write-Host $msg }
 
@@ -158,19 +158,19 @@ function Invoke-BuildAgent {
     switch ($ext) {
         ".c" {
             $cc = Require-Prog "gcc" @("cc", "clang")
-            & $cc -O2 -o (Join-Path $Root "c2agent-c.exe") $AgentFile
+            & $cc -O2 -o (Join-Path $Root "wymagent-c.exe") $AgentFile
             if ($LASTEXITCODE -ne 0) { throw "gcc build failed (exit $LASTEXITCODE)" }
-            $script:AgentFile = Join-Path $Root "c2agent-c.exe"
+            $script:AgentFile = Join-Path $Root "wymagent-c.exe"
         }
         ".cpp" {
             $cxx = Require-Prog "g++" @("clang++")
-            & $cxx -O2 -o (Join-Path $Root "c2agent-cpp.exe") $AgentFile
+            & $cxx -O2 -o (Join-Path $Root "wymagent-cpp.exe") $AgentFile
             if ($LASTEXITCODE -ne 0) { throw "g++ build failed (exit $LASTEXITCODE)" }
-            $script:AgentFile = Join-Path $Root "c2agent-cpp.exe"
+            $script:AgentFile = Join-Path $Root "wymagent-cpp.exe"
         }
         ".cs" {
             $dot = Require-Prog "dotnet"
-            $tmp = Join-Path $Root ".c2csbuild"
+            $tmp = Join-Path $Root ".wymcsbuild"
             New-Item -ItemType Directory -Path $tmp -Force | Out-Null
             Copy-Item $AgentFile (Join-Path $tmp "Program.cs") -Force
             Push-Location $tmp
@@ -184,26 +184,26 @@ function Invoke-BuildAgent {
         }
         ".go" {
             $g = Require-Prog "go"
-            & $g build -o (Join-Path $Root "c2agent-go.exe") $AgentFile
+            & $g build -o (Join-Path $Root "wymagent-go.exe") $AgentFile
             if ($LASTEXITCODE -ne 0) { throw "go build failed (exit $LASTEXITCODE)" }
-            $script:AgentFile = Join-Path $Root "c2agent-go.exe"
+            $script:AgentFile = Join-Path $Root "wymagent-go.exe"
         }
         ".rs" {
             $rt = Require-Prog "rustc"
-            & $rt -O --edition 2021 -o (Join-Path $Root "c2agent-rs.exe") $AgentFile
+            & $rt -O --edition 2021 -o (Join-Path $Root "wymagent-rs.exe") $AgentFile
             if ($LASTEXITCODE -ne 0) { throw "rustc build failed (exit $LASTEXITCODE)" }
-            $script:AgentFile = Join-Path $Root "c2agent-rs.exe"
+            $script:AgentFile = Join-Path $Root "wymagent-rs.exe"
         }
         ".java" {
             $jc = Require-Prog "javac"
             $jar = Require-Prog "jar"
-            $d = Join-Path $Root ".c2jbuild"
+            $d = Join-Path $Root ".wymjbuild"
             New-Item -ItemType Directory -Path $d -Force | Out-Null
             & $jc --release 8 -encoding UTF-8 -d $d $AgentFile
             if ($LASTEXITCODE -ne 0) { throw "javac failed (exit $LASTEXITCODE)" }
-            & $jar cfe (Join-Path $Root "c2agent-java.jar") Agent -C $d .
+            & $jar cfe (Join-Path $Root "wymagent-java.jar") Agent -C $d .
             if ($LASTEXITCODE -ne 0) { throw "jar failed (exit $LASTEXITCODE)" }
-            $script:AgentFile = Join-Path $Root "c2agent-java.jar"
+            $script:AgentFile = Join-Path $Root "wymagent-java.jar"
         }
         default { throw "cannot build $ext source; pass a prebuilt -Agent binary or an interpreted script" }
     }
@@ -255,10 +255,10 @@ function Get-AgentArgv {
     $argv = $cmd + @("--server", "$Server") + (Get-TokenArg (Get-AgentLangLabel)) +
            @("--interval", "$Interval", "--jitter", "$Jitter")
     # per-install state file: distinct across hosts/ports so WIN+WSL never
-    # fight over the same .c2agent.json (which caused re-register churn).
+    # fight over the same .wymagent.json (which caused re-register churn).
     if ((Get-AgentLangLabel) -eq "lua") {
         $port = "$Server" -replace '^.*:', ''
-        $argv += @("--state", (Join-Path $env:USERPROFILE (".c2agent-" + $port + ".json")))
+        $argv += @("--state", (Join-Path $env:USERPROFILE (".wymagent-" + $port + ".json")))
     }
     if ($VerboseService) { $argv += "--verbose" }
     return $argv
@@ -308,7 +308,7 @@ function Get-Backend {
 function Get-WatchArgv {
     # Single-file watchdog: the scheduled task / SC service re-invokes THIS
     # script with the 'watch' action, so the scheduler needs no separate
-    # c2agent-watch.ps1 file. The full install-time config travels as args.
+    # wymagent-watch.ps1 file. The full install-time config travels as args.
     $self = $PSCommandPath
     $argv = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $self, "watch",
               "-Agent", $AgentFile, "-Server", $Server, "-Token", $Token,
@@ -320,7 +320,7 @@ function Get-WatchArgv {
 
 function Invoke-Watch {
     # Runs inside the scheduled task / SC service. Auto-relaunches the agent
-    # after a crash (the behaviour the old c2agent-watch.ps1 provided).
+    # after a crash (the behaviour the old wymagent-watch.ps1 provided).
     $argv = Get-AgentArgv
     [System.IO.File]::WriteAllText($WatchPidFile, [string]$PID)
     Write-Line ("watch: pid {0}, server {1}, agent {2}" -f $PID, $Server, $AgentFile)
@@ -370,7 +370,7 @@ function Install-Sc {
     }
     # The service runs cmd which detaches a powershell that re-invokes THIS
     # script in 'watch' mode, so SCM never awaits a StartServiceCtrlDispatcher
-    # payload and no separate c2agent-watch.ps1 file is needed.
+    # payload and no separate wymagent-watch.ps1 file is needed.
     $watchline = '"' + (Join-CmdLine (@("powershell.exe") + (Get-WatchArgv))) + '"'
     $cmdline = 'cmd.exe /c start "" /b ' + $watchline
     $img = '"' + $cmdline.Replace('"', '\"') + '"'

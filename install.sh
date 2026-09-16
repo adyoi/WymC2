@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Setup / install the C2 server on Linux / macOS / BSD / WSL.
 # Creates a venv, installs requirements.txt, validates host/port + username/
-# password, and starts the server. When C2_PASSWORD is not provided a strong
+# password, and starts the server. When WYM_PASSWORD is not provided a strong
 # random password is generated and printed, and the admin user is created/reset
 # to it on every start (so login always matches).
 #
 # Design:
 #   1. Resolve & VALIDATE defaults for host, port, username.
-#   2. Password: -p / --password / C2_PASSWORD > random generated (printed).
+#   2. Password: -p / --password / WYM_PASSWORD > random generated (printed).
 #   3. Create server/.venv-wsl if missing and pip-install requirements.txt.
 #   4. Verify builder toolchain for "build on server" (report missing, no
 #      auto-install).
@@ -15,7 +15,7 @@
 #      Writes server/.server.pid_wsl so uninstall can stop the right process.
 #      Runtime state is kept per-OS ("._wsl" suffix) so Windows (install.ps1)
 #      and Unix/WSL never collide on a shared project folder: pid/port/token/
-#      log follow .venv-wsl and c2_wsl.db naming.
+#      log follow .venv-wsl and wym_wsl.db naming.
 #
 # Usage:
 #   ./install.sh                         # full setup + start (background)
@@ -25,15 +25,15 @@
 #   ./install.sh check                   # only venv + deps + toolchain
 #   ./install.sh run                     # setup then run in the foreground
 #
-# Env: C2_HOST, C2_PORT (default 8001), C2_USER (default admin), C2_PASSWORD
+# Env: WYM_HOST, WYM_PORT (default 8001), WYM_USER (default admin), WYM_PASSWORD
 
 set -euo pipefail
 
 ACTION="install"
-LISTEN_HOST="${C2_HOST:-}"
-LISTEN_PORT="${C2_PORT:-}"
-C2_USER="${C2_USER:-}"
-C2_PASSWORD="${C2_PASSWORD:-}"
+LISTEN_HOST="${WYM_HOST:-}"
+LISTEN_PORT="${WYM_PORT:-}"
+WYM_USER="${WYM_USER:-}"
+WYM_PASSWORD="${WYM_PASSWORD:-}"
 
 usage() {
     cat <<'EOF'
@@ -47,12 +47,12 @@ Usage: ./install.sh [options] [install|check|start|run]
 
 Options:
   -h, --help                 Show this help
-  -Host, --host HOST         Bind address (default: 127.0.0.1, or C2_HOST)
-  -Port, --port PORT         Listen port  (default: 8001, or C2_PORT)
-  -User, --user USER         Dashboard user (default: admin, or C2_USER)
-  -p, -Password, --password  Dashboard password (default: C2_PASSWORD or random)
+  -Host, --host HOST         Bind address (default: 127.0.0.1, or WYM_HOST)
+  -Port, --port PORT         Listen port  (default: 8001, or WYM_PORT)
+  -User, --user USER         Dashboard user (default: admin, or WYM_USER)
+  -p, -Password, --password  Dashboard password (default: WYM_PASSWORD or random)
 
-Virtualenv: server/.venv-wsl   Database: server/c2_wsl.db
+Virtualenv: server/.venv-wsl   Database: server/wym_wsl.db
 State:     server/.server.pid_wsl, .server.port_wsl, .agent_token_wsl,
            server/server_wsl.log
 
@@ -73,17 +73,17 @@ while [ $# -gt 0 ]; do
             LISTEN_PORT="$2"; shift 2 ;;
         -User|--user|-u)
             [ $# -ge 2 ] || { echo "missing value for $1" >&2; exit 1; }
-            C2_USER="$2"; shift 2 ;;
+            WYM_USER="$2"; shift 2 ;;
         -p|-Password|--password)
             [ $# -ge 2 ] || { echo "missing value for $1" >&2; exit 1; }
-            C2_PASSWORD="$2"; shift 2 ;;
+            WYM_PASSWORD="$2"; shift 2 ;;
         --host=*|--port=*|--user=*|--password=*)
             key="${1%%=*}"; val="${1#*=}"
             case "$key" in
                 --host) LISTEN_HOST="$val" ;;
                 --port) LISTEN_PORT="$val" ;;
-                --user) C2_USER="$val" ;;
-                --password) C2_PASSWORD="$val" ;;
+                --user) WYM_USER="$val" ;;
+                --password) WYM_PASSWORD="$val" ;;
             esac
             shift ;;
         *) echo "unknown option: $1" >&2; usage >&2; exit 1 ;;
@@ -108,25 +108,25 @@ info()  { printf '  [..]  %s\n' "$*"; }
 log "Configuration"
 [ -n "$LISTEN_HOST" ] || LISTEN_HOST="127.0.0.1"
 [ -n "$LISTEN_PORT" ] || LISTEN_PORT="8001"
-[ -n "$C2_USER" ]     || C2_USER="admin"
+[ -n "$WYM_USER" ]     || WYM_USER="admin"
 
 case "$LISTEN_PORT" in
-    *[!0-9]*|'') warn "invalid C2_PORT='$LISTEN_PORT'"; exit 1 ;;
+    *[!0-9]*|'') warn "invalid WYM_PORT='$LISTEN_PORT'"; exit 1 ;;
 esac
 if [ "$LISTEN_PORT" -lt 1 ] || [ "$LISTEN_PORT" -gt 65535 ]; then
     warn "invalid port: $LISTEN_PORT"; exit 1
 fi
 if [ -z "$LISTEN_HOST" ]; then warn "host must not be empty"; exit 1; fi
-if [ -z "$C2_USER" ]; then warn "user must not be empty"; exit 1; fi
+if [ -z "$WYM_USER" ]; then warn "user must not be empty"; exit 1; fi
 
-if [ -z "$C2_PASSWORD" ]; then
-    C2_PASSWORD="$(head -c24 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c16)"
-    warn "no password provided -> generated random password: $C2_PASSWORD"
+if [ -z "$WYM_PASSWORD" ]; then
+    WYM_PASSWORD="$(head -c24 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c16)"
+    warn "no password provided -> generated random password: $WYM_PASSWORD"
 fi
 
 info "host : $LISTEN_HOST"
 info "port : $LISTEN_PORT"
-info "user : $C2_USER"
+info "user : $WYM_USER"
 info "pass : (set)"
 
 if [ ! -d "$SERVER" ]; then warn "server dir not found: $SERVER"; exit 1; fi
@@ -279,10 +279,10 @@ do_start() {
     if [ ! -x "$PY" ]; then
         warn "venv python not found: $PY (run ./install.sh first)"; exit 1
     fi
-    export C2_HOST="$LISTEN_HOST"
-    export C2_PORT="$LISTEN_PORT"
-    export C2_USER
-    export C2_PASSWORD
+    export WYM_HOST="$LISTEN_HOST"
+    export WYM_PORT="$LISTEN_PORT"
+    export WYM_USER
+    export WYM_PASSWORD
     stop_previous
     if [ "$ACTION" = "run" ]; then
         rm -f "$PIDFILE" "$PORTFILE"
@@ -302,7 +302,7 @@ do_start() {
         exit 1
     fi
     ok "server started (PID $pid) -> http://$LISTEN_HOST:$LISTEN_PORT"
-    ok "login: $C2_USER / $C2_PASSWORD"
+    ok "login: $WYM_USER / $WYM_PASSWORD"
     if [ -f "$SERVER/.agent_token_wsl" ]; then
         printf '  X-Agent-Token: %s\n' "$(tr -d '\r\n' < "$SERVER/.agent_token_wsl")"
     fi

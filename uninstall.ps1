@@ -8,12 +8,12 @@
     Removes the artifacts created on this platform (Windows) plus the
     platform-neutral builds/ output:
       server\.venv                          (virtualenv)
-      server\c2.db                          (database)
+      server\wym.db                          (database)
       server\.agent_token, server\server.log, server\server.err.log
       server\.server.pid, server\.server.port
       server\builds and __pycache__ folders (build artifacts)
 
-    Unix/WSL artifacts (.venv-wsl, c2_wsl.db, .agent_token_wsl,
+    Unix/WSL artifacts (.venv-wsl, wym_wsl.db, .agent_token_wsl,
     .server.pid/.port_wsl, server_wsl.log) are left untouched.
 
     Adds -Force to skip the confirmation prompt.
@@ -96,7 +96,7 @@ $files = @(
     (Join-Path $Server "server.log"),
     (Join-Path $Server "server.err.log"),
     (Join-Path $Server ".agent_token"),
-    (Join-Path $Server "c2.db")
+    (Join-Path $Server "wym.db")
 )
 foreach ($f in $files) {
     if (Test-Path -LiteralPath $f) {

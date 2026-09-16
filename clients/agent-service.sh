@@ -13,12 +13,12 @@
 #
 # Backends (picked per --backend):
 #   Linux  :
-#     - systemd (systemctl) -> service named "c2agent" (Description = the Wym
-#       C2 agent label).  start: systemctl start c2agent  relaunch: same
+#     - systemd (systemctl) -> service named "wymagent" (Description = the Wym
+#       C2 agent label).  start: systemctl start wymagent  relaunch: same
 #     - Fallback / forced  : cron keeps the agent alive (@hourly, --at-boot for
 #       @reboot) with a pidfile for clean stop/status
 #   macOS (Darwin):
-#     - launchd (launchctl) -> LaunchAgent "com.c2agent.agent"
+#     - launchd (launchctl) -> LaunchAgent "com.wymagent.agent"
 #     - Fallback / forced  : cron (same as above)
 #
 # Token resolution order: -t, then project server/.agent_token_wsl (or
@@ -66,8 +66,8 @@ BACKEND="${BACKEND:-auto}"
 AGENT_LANG="auto"
 BUILD="${BUILD:-false}"
 
-SERVICE_NAME="c2agent"
-LAUNCHD_LABEL="com.c2agent.agent"
+SERVICE_NAME="wymagent"
+LAUNCHD_LABEL="com.wymagent.agent"
 CRON_TAG="# Wym C2 Agent managed by agent-service.sh"
 PID_FILE=""
 AGENT_DESC="Wym C2 are What you missed is Command and Control Frameworks"
@@ -150,27 +150,27 @@ build_agent() {
     case "$ext" in
         c)
             local cc; cc="$(tools gcc gcc cc clang)"
-            "$cc" -O2 -o "$ROOT_DIR/c2agent-c" "$src"
-            AGENT_FILE="$ROOT_DIR/c2agent-c"
+            "$cc" -O2 -o "$ROOT_DIR/wymagent-c" "$src"
+            AGENT_FILE="$ROOT_DIR/wymagent-c"
             ;;
         cpp)
             local cxx; cxx="$(tools g++ g++ clang++)"
-            "$cxx" -O2 -o "$ROOT_DIR/c2agent-cpp" "$src"
-            AGENT_FILE="$ROOT_DIR/c2agent-cpp"
+            "$cxx" -O2 -o "$ROOT_DIR/wymagent-cpp" "$src"
+            AGENT_FILE="$ROOT_DIR/wymagent-cpp"
             ;;
         go)
             local go; go="$(tools go go)"
-            "$go" build -o "$ROOT_DIR/c2agent-go" "$src"
-            AGENT_FILE="$ROOT_DIR/c2agent-go"
+            "$go" build -o "$ROOT_DIR/wymagent-go" "$src"
+            AGENT_FILE="$ROOT_DIR/wymagent-go"
             ;;
         rs)
             local rustc; rustc="$(tools rustc rustc)"
-            "$rustc" -O --edition 2021 -o "$ROOT_DIR/c2agent-rs" "$src"
-            AGENT_FILE="$ROOT_DIR/c2agent-rs"
+            "$rustc" -O --edition 2021 -o "$ROOT_DIR/wymagent-rs" "$src"
+            AGENT_FILE="$ROOT_DIR/wymagent-rs"
             ;;
         cs)
             local dot; dot="$(tools dotnet dotnet)"
-            local tmp="$ROOT_DIR/.c2csbuild-$RANDOM"
+            local tmp="$ROOT_DIR/.wymcsbuild-$RANDOM"
             mkdir -p "$tmp"
             cp "$src" "$tmp/Program.cs"
             ( cd "$tmp" && "$dot" new console --force -o . >/dev/null 2>&1 && "$dot" build -o "$tmp/out" -q ) \
@@ -180,12 +180,12 @@ build_agent() {
             ;;
         java)
             local jc jar; jc="$(tools javac javac)"; jar="$(tools jar jar)"
-            local d="$ROOT_DIR/.c2jbuild-$RANDOM"
+            local d="$ROOT_DIR/.wymjbuild-$RANDOM"
             mkdir -p "$d"
             "$jc" --release 8 -encoding UTF-8 -d "$d" "$src" || { rm -rf "$d"; die "javac failed"; }
-            "$jar" cfe "$ROOT_DIR/c2agent-java.jar" Agent -C "$d" . || { rm -rf "$d"; die "jar failed"; }
+            "$jar" cfe "$ROOT_DIR/wymagent-java.jar" Agent -C "$d" . || { rm -rf "$d"; die "jar failed"; }
             rm -rf "$d"
-            AGENT_FILE="$ROOT_DIR/c2agent-java.jar"
+            AGENT_FILE="$ROOT_DIR/wymagent-java.jar"
             ;;
         *) die "cannot build .$ext source; pass a prebuilt -a agent" ;;
     esac
@@ -282,11 +282,11 @@ token_flag() {
 build_cmd() {
     local cmd=("${CMD_LEAD[@]}" --server "$SERVER" $(token_flag) --interval "$INTERVAL" --jitter "$JITTER")
     # per-install state file (distinct across hosts/ports to avoid
-    # WIN+WSL fighting over the same .c2agent.json and re-registering).
+    # WIN+WSL fighting over the same .wymagent.json and re-registering).
     if [[ "$(lang_label "$AGENT_FILE")" == "lua" ]]; then
         local port="${SERVER##*:}"
-        local sf="/root/.c2agent-${port}.json"
-        if [[ -d "$HOME" ]]; then sf="$HOME/.c2agent-${port}.json"; fi
+        local sf="/root/.wymagent-${port}.json"
+        if [[ -d "$HOME" ]]; then sf="$HOME/.wymagent-${port}.json"; fi
         cmd+=(--state "$sf")
     fi
     [[ "$VERBOSE" == "true" ]] && cmd+=(--verbose)
@@ -333,8 +333,8 @@ WorkingDirectory=$ROOT_DIR
 ExecStart=$cmd
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/log/c2agent.log
-StandardError=append:/var/log/c2agent.err.log
+StandardOutput=append:/var/log/wymagent.log
+StandardError=append:/var/log/wymagent.err.log
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
@@ -375,9 +375,9 @@ status_systemd() {
     echo "backend : systemd"
     echo "name    : $SERVICE_NAME"
     systemctl status "$SERVICE_NAME" --no-pager -l | head -12 || true
-    if [[ -f /var/log/c2agent.err.log ]]; then
+    if [[ -f /var/log/wymagent.err.log ]]; then
         echo "recent stderr:"
-        tail -5 /var/log/c2agent.err.log | sed 's/^/  /'
+        tail -5 /var/log/wymagent.err.log | sed 's/^/  /'
     fi
 }
 
@@ -406,7 +406,7 @@ EOF
     local arr=("${CMD_LEAD[@]}" --server "$SERVER" $(token_flag) --interval "$INTERVAL" --jitter "$JITTER")
     if [[ "$(lang_label "$AGENT_FILE")" == "lua" ]]; then
         local port="${SERVER##*:}"
-        arr+=(--state "$HOME/.c2agent-${port}.json")
+        arr+=(--state "$HOME/.wymagent-${port}.json")
     fi
     [[ "$VERBOSE" == "true" ]] && arr+=(--verbose)
     local a
@@ -475,7 +475,7 @@ status_launchd() {
 }
 
 # ---------- Cron (fallback / forced) ----------
-PID_FILE="$ROOT_DIR/.c2agent-cron.pid"
+PID_FILE="$ROOT_DIR/.wymagent-cron.pid"
 
 install_cron() {
     check_args
@@ -484,18 +484,18 @@ install_cron() {
     schedule=$([[ "$AT_BOOT" == "true" ]] && echo "@reboot" || echo "0 * * * *")
 
     log "Installing cron job: $SERVICE_NAME"
-    local tmpfile="/tmp/c2cron.$$"
+    local tmpfile="/tmp/wymcron.$$"
     ( crontab -l 2>/dev/null || true ) | grep -v "$CRON_TAG" > "$tmpfile" || true
     echo "$schedule $cmd $CRON_TAG" >> "$tmpfile"
     crontab "$tmpfile"
     rm -f "$tmpfile"
-    printf '%s\n' "$cmd" > "${HOME}/.c2agent-cron.cmd"
+    printf '%s\n' "$cmd" > "${HOME}/.wymagent-cron.cmd"
     log "Installed cron job '$SERVICE_NAME' (schedule: $schedule)"
 }
 
 uninstall_cron() {
     if cron_enabled; then
-        local tmpfile="/tmp/c2cron.$$"
+        local tmpfile="/tmp/wymcron.$$"
         ( crontab -l 2>/dev/null || true ) | grep -v "$CRON_TAG" > "$tmpfile" || true
         crontab "$tmpfile"
         rm -f "$tmpfile"
@@ -506,7 +506,7 @@ uninstall_cron() {
         [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && kill "$pid" 2>/dev/null
         rm -f "$PID_FILE"
     fi
-    rm -f "${HOME}/.c2agent-cron.cmd"
+    rm -f "${HOME}/.wymagent-cron.cmd"
 }
 
 start_cron() {
@@ -519,14 +519,14 @@ start_cron() {
         rm -f "$PID_FILE"
     fi
     local runcmd=""
-    if [[ -f "${HOME}/.c2agent-cron.cmd" ]]; then
-        runcmd="$(<"${HOME}/.c2agent-cron.cmd")"
+    if [[ -f "${HOME}/.wymagent-cron.cmd" ]]; then
+        runcmd="$(<"${HOME}/.wymagent-cron.cmd")"
     fi
     if [[ -z "$runcmd" ]]; then
         resolve_cmd "$AGENT_FILE"
         runcmd="$(build_cmd)"
     fi
-    nohup bash -c "$runcmd" >/var/log/c2agent-cron.log 2>&1 </dev/null &
+    nohup bash -c "$runcmd" >/var/log/wymagent-cron.log 2>&1 </dev/null &
     echo $! > "$PID_FILE"
     log "Launched agent directly (pid $(cat "$PID_FILE"); cron backend)"
 }

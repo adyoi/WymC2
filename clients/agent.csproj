@@ -3,8 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <AssemblyName>c2agent</AssemblyName>
-    <RootNamespace>c2agent</RootNamespace>
+    <AssemblyName>wymagent</AssemblyName>
+    <RootNamespace>wymagent</RootNamespace>
     <Nullable>disable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>

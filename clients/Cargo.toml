@@ -1,11 +1,11 @@
 # Crate manifest for clients/agent.rs
 [package]
-name = "c2agent"
+name = "wymagent"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "c2agent"
+name = "wymagent"
 path = "agent.rs"
 
 [dependencies]

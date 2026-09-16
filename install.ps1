@@ -2,14 +2,14 @@
 .SYNOPSIS
     Setup / install the C2 server on Windows. Creates a venv, installs
     requirements.txt, validates host/port + username/password, and starts the
-    server. When C2_PASSWORD is not provided a strong random password is
+    server. When WYM_PASSWORD is not provided a strong random password is
     generated and printed, and the admin user is created/reset to it on every
     start (so login always matches).
 
 .DESCRIPTION
     Design:
       1. Resolve & VALIDATE defaults for host, port, username.
-      2. Determine password: -Password > $env:C2_PASSWORD > random generated
+      2. Determine password: -Password > $env:WYM_PASSWORD > random generated
          password (always printed).
       3. Create server\.venv if missing and pip-install requirements.txt.
       4. Verify builder toolchain for "build on server" (report missing, no
@@ -66,11 +66,11 @@ function Get-PythonLauncher {
 
 # ---------------- defaults + validation ----------------
 Hdr "Configuration"
-if ($ListenHost -eq "") { $ListenHost = $env:C2_HOST }
+if ($ListenHost -eq "") { $ListenHost = $env:WYM_HOST }
 if ($ListenHost -eq "") { $ListenHost = "127.0.0.1" }
-if ($User -eq "") { $User = $env:C2_USER }
+if ($User -eq "") { $User = $env:WYM_USER }
 if ($User -eq "") { $User = "admin" }
-if ($Port -eq 0)  { if ($env:C2_PORT) { $Port = [int]$env:C2_PORT } else { $Port = 8000 } }
+if ($Port -eq 0)  { if ($env:WYM_PORT) { $Port = [int]$env:WYM_PORT } else { $Port = 8000 } }
 
 if ($Port -lt 1 -or $Port -gt 65535) { throw "invalid port: $Port" }
 if ([string]::IsNullOrWhiteSpace($ListenHost)) { throw "host must not be empty" }
@@ -82,8 +82,8 @@ function New-RandomPass {
 }
 if ($Password -ne "") {
     $PasswordFinal = $Password
-} elseif ($env:C2_PASSWORD) {
-    $PasswordFinal = $env:C2_PASSWORD
+} elseif ($env:WYM_PASSWORD) {
+    $PasswordFinal = $env:WYM_PASSWORD
 }
 if (-not $PasswordFinal) {
     $PasswordFinal = New-RandomPass
@@ -227,10 +227,10 @@ function Start-Server {
     if (-not (Test-Path -LiteralPath $Py)) {
         throw "venv python not found: $Py (run install.ps1 first)"
     }
-    $env:C2_HOST = $ListenHost
-    $env:C2_PORT = [string]$Port
-    $env:C2_USER = $User
-    $env:C2_PASSWORD = $PasswordFinal
+    $env:WYM_HOST = $ListenHost
+    $env:WYM_PORT = [string]$Port
+    $env:WYM_USER = $User
+    $env:WYM_PASSWORD = $PasswordFinal
     Stop-PreviousServer
     if ($Foreground -or $Action -eq "run") {
         Remove-Item -LiteralPath $PidFile, $PortFile -Force -ErrorAction SilentlyContinue

@@ -143,7 +143,7 @@ def test_metrics_endpoint_reports_registered_agent(client):
 
 
 def test_environment_vars_seeded(client):
-    assert os.environ["C2_AGENT_TOKEN"] == "test-agent-token"
+    assert os.environ["WYM_AGENT_TOKEN"] == "test-agent-token"
 
 
 # ---------------------------------------------------------------------------

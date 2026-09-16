@@ -4,167 +4,158 @@ Build, run and develop the C2 server + agents.
 
 ## Prerequisites
 
-- Python 3.10+ (server; virtualenvs are created in `server/.venv`).
-- For agent **builder** targets, the matching toolchain is detected at install
-  time and required only when you build that language:
-  - Go (`go`), Rust (`cargo`), C/CPP (`gcc`/`g++`/`clang` + libcurl + `make` or MinGW on Windows), C# (`dotnet`), Java (`javac`/`java`), Node (`node`), PowerShell (bundled with Windows or `pwsh` on Unix), Lua + `luasocket`, PHP, Ruby, Perl (runtime must exist on the *target*, not the server).
-- Installers **validate** the toolchain and print ready-to-run install commands
-  if something is missing; they do not auto-download toolchains.
-- A kickstart script for .NET lives at the repo root (`dotnet-install.sh` —
-  see **Installing the .NET SDK on Unix** below). Builds the server runs live
-  under `server/builds/` (gitignored).
+- Python 3.10+ (server; venv in `server/.venv` on Windows,
+  `server/.venv-wsl` on Linux/macOS/WSL).
+- A builder toolchain per language you want to compile on the server
+  (`/generate` → "build on server"). Installers probe for them and print
+  ready-to-run install commands when missing; they never auto-download.
 
-### Installing the build toolchains
+### Toolchain reference
 
-Each OS installer (`install.ps1` on Windows, `install.sh` on Unix/WSL) probes
-for the binaries listed below and prints exact install commands when one is
-missing. Here is a consolidated reference:
+| Toolchain | Windows (`winget`/`scoop`) | Linux (`apt-get`) | macOS (`brew`) | Probed by server |
+|-----------|----------------------------|-------------------|----------------|------------------|
+| Go        | `GoLang.Go` / `go`         | `golang`          | `go`           | `go`             |
+| Rust      | `Rustlang.Rustup` / `rustup` | `rustc cargo`   | `rust`         | `cargo`          |
+| C / C++   | WinLibs / `mingw`          | `build-essential libcurl4-openssl-dev` | `gcc` / Xcode CLT | `gcc`/`g++`/`clang` |
+| .NET SDK  | `Microsoft.DotNet.SDK.8` / `dotnet-sdk` | `dotnet-sdk-8.0` | `dotnet` | `dotnet` |
+| Java      | Oracle.JDK / `openjdk`     | `openjdk-17-jdk`  | `openjdk`      | `javac`          |
+| Android   | Android Studio / SDK cmdline-tools (any OS) | same | same | `gradle` + `ANDROID_HOME`/`ANDROID_SDK_ROOT` |
+| iOS       | —                             | —                | `xcode-select --install` | `xcrun` + iphoneos SDK |
 
-| Tool | Windows `winget` / `scoop`                                | Linux (`apt-get`)                               | macOS (`brew`)                  | Probed by server |
-|------|------------------------------------------------------------|-------------------------------------------------|---------------------------------|------------------|
-| Go   | `winget install GoLang.Go` / `scoop install go`           | `sudo apt-get install golang`                   | `brew install go`               | `go`             |
-| Rust | `winget install Rustlang.Rustup` / `scoop install rustup` | `sudo apt-get install rustc cargo`              | `brew install rust`             | `cargo`          |
-| C/C++| `winget install BrechtSanders.WinLibs.POSIX.UCRT` / `scoop install mingw` | `sudo apt-get install build-essential libcurl4-openssl-dev` | `brew install gcc` / XCode CLT | `gcc`/`g++` or `clang` |
-| .NET | `winget install Microsoft.DotNet.SDK.8` / `scoop install dotnet-sdk` | `sudo apt-get install dotnet-sdk-8.0` | `brew install dotnet` | `dotnet` |
-| Java | `winget install Oracle.JDK` / `scoop install openjdk`     | `sudo apt-get install openjdk-17-jdk`          | `brew install openjdk`          | `javac`          |
+**Rust on Linux/WSL** additionally needs X11/input dev headers because the
+`rdev` dependency (keylog) compiles `evdev-sys`:
+
+```
+sudo apt-get install autoconf automake libtool libevdev-dev \
+    libx11-dev libxi-dev libxtst-dev libxrandr-dev libxinerama-dev \
+    libxcursor-dev libxext-dev libxrender-dev libxfixes-dev
+```
+
+**Android template** (`clients/mobile/android/`) is a minimal Gradle project
+(package `com.wym.c2`, no external deps, `assembleRelease`). iOS
+(`clients/mobile/ios/`) compiles with a bare `xcrun swiftc` (no `.xcodeproj`).
+Server URL/token/interval are injected into `Config.java`/`Config.swift`; the
+artifact name + disguise icon are rendered by `server/icons.py`. Both are
+folded into the cache hash, so a cached build is never stale.
 
 ### Installing the .NET SDK on Unix
 
-The bundled `dotnet-install.sh` (upstream Microsoft script) installs the SDK to
-`~/.dotnet` with no admin privileges needed. It automatically persists the PATH
-to your shell profile so `dotnet` is available in subsequent shells.
+Bundled `dotnet-install.sh` (upstream) installs to `~/.dotnet` without root and
+persists PATH to the shell profile. The server probes `~/.dotnet` directly, so
+builds work even before a new shell.
 
 ```bash
-./dotnet-install.sh                    # latest LTS SDK
-./dotnet-install.sh --channel 8.0      # specific major version
-./dotnet-install.sh --version 8.0.404  # exact version pin
+./dotnet-install.sh                  # latest LTS SDK
+./dotnet-install.sh --channel 8.0    # specific major
+./dotnet-install.sh --version 8.0.404
 ```
 
-If `dotnet` is already installed under `~/.dotnet` but is not on `PATH` in the
-current session, both `dotnet-install.sh` and `install.sh` add the export
-automatically and the server probes `~/.dotnet` directly, so builds work even
-before you open a new shell.
+### Rust cross targets
 
-### Rust cross-compilation targets
-
-By default Cargo can only build for the host architecture. To cross-compile
-for other platforms, add the target first:
+Cargo builds the host by default; add targets first:
 
 ```bash
-rustup target add x86_64-unknown-linux-musl
-rustup target add aarch64-unknown-linux-gnu
-rustup target add x86_64-pc-windows-gnu
+rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-gnu
 ```
-
-### CI toolchain installs (for reference)
-
-The CI pipeline (`ci.yml`) installs toolchains as follows (Ubuntu runners):
-
-| Step | Action |
-|------|--------|
-| Python | `actions/setup-python@v5` + `pip install -r requirements-dev.txt` |
-| Go | `actions/setup-go@v5` |
-| Rust | `dtolnay/rust-toolchain@stable` + `Swatinem/rust-cache@v2` + `apt-get install build-essential libcurl4-openssl-dev libx11-dev libxi-dev libxtst-dev` |
-| C / C++ | Same system libs above; builds with `gcc -O2 ... -lcurl` / `g++ ... -lcurl` |
-| Java | `actions/setup-java@v4` (Temurin 21) |
-| .NET | `actions/setup-dotnet@v4` (`8.0.x`) |
-| Lua | `apt-get install lua5.4` + `luac -p` |
-| PHP | `apt-get install php-cli` |
-| Ruby | `apt-get install ruby` |
-| Perl | `apt-get install perl` |
 
 ## Server
 
 ```bash
-cd server
-python -m venv .venv
-# Windows: .venv\Scripts\pip install -r requirements.txt
-# Unix:    .venv/bin/pip install -r requirements.txt
-# then run with the dashboard password pinned (see below)
+cd server && python -m venv .venv
+# Windows: .venv\Scripts\pip install -r ..\requirements.txt
+# Unix:    .venv-wsl/bin/pip install -r ..\requirements.txt
+# then run with the dashboard password pinned (below)
 ```
 
-Environment knobs (see `server/main.py`):
+### Environment knobs (as defined in `server/main.py` / `server/database.py`)
 
-| Env var              | Meaning                                                  |
-|----------------------|----------------------------------------------------------|
-| `C2_PASSWORD`        | Dashboard password. When **unset on boot**, a random one is generated and **printed**; on every subsequent boot with it unset the existing user password is **kept** (a key is printed instead). Use `-P/--password` from the installers for a fixed password. |
-| `C2_PORT`            | Listen port (`8000` Windows default, `8001` Unix default). |
-| `C2_TOKEN`           | Override the generated agent token.                       |
-| `AGENT_TOKEN_FILE`   | Read the agent token from a file if the env var is unset. |
-| `C2_RETRY_AFTER`     | Seconds before an unacknowledged task is retried.         |
-| `C2_ALLOWED_ORIGINS` | CORS origins (same-origin by default — leave unset).      |
+| Env var                    | Meaning |
+|----------------------------|---------|
+| `WYM_HOST` / `WYM_PORT`    | listen address/port (Windows default `8000`, Unix `8001`) |
+| `WYM_USER` / `WYM_PASSWORD`| dashboard user + password; when **unset on boot** a random password is generated and printed, and the existing stored hash is **kept** |
+| `WYM_AGENT_TOKEN`          | override the generated agent token (or `server/.agent_token{_wsl}`) |
+| `WYM_DB_PATH`              | override the SQLite location |
+| `WYM_STALE_AFTER` / `WYM_DEAD_AFTER` | agent staleness windows (defaults 90/600 s) |
+| `WYM_RETRY_AFTER`          | seconds before an unacknowledged task is retried (default 180) |
+| `WYM_MAX_UPLOAD_MB` / `WYM_RESULT_LIMIT` | upload cap (512) / result char cap (50000) |
+| `WYM_TLS`                  | `1` for a production reverse-proxy/TLS setup |
+| `WYM_API_DOCS`             | `1` enables `/api/docs` |
+| `WYM_ENC_KEY`              | optional fixed obfuscation key |
+| `WYM_EXPLORER_ROOT` / `WYM_EXPLORER_UNRESTRICTED` | file-explorer root / allow-any flag |
 
-### Database layout
+### Per-OS state files
 
-- SQLite, one file per platform: `server/c2.db` (Windows), `server/c2_wsl.db`
-  (Unix). Schema is created idempotently at boot in `server/database.py`
-  (`SCHEMA`), not a separate `.sql` file.
-- WSL note: the installer starts the server from inside the shared project
-  folder (drvfs), so the live DB is `server/c2_wsl.db` on `/mnt/d/...`. A DB
-  living only on the ext4 side (e.g. `/home/<user>/c2_wsl.db`) was used during
-  an older install layout — if you find a stale drvfs copy of the WSL DB,
-  remove it so it does not shadow the live one.
+Every runtime artifact is per-OS so a folder shared Windows↔WSL never
+collides:
 
-### Config/state files
+| Asset          | Windows        | Unix / WSL        |
+|----------------|----------------|-------------------|
+| SQLite DB      | `server/wym.db`       | `server/wym_wsl.db` |
+| Agent token    | `server/.agent_token` | `server/.agent_token_wsl` |
+| PID / port     | `server/.server.pid` / `.server.port` | `_wsl` suffixed |
+| Log            | `server/server.log`   | `server/server_wsl.log` |
+| Agent PID file | `clients/.wymagent.json` | same (per-agent state) |
 
-- `server/.agent_token` — shared agent token sent to agents (`X-Agent-Token`).
-- Dashboard users + password hashes live in the SQLite `users` table
-  (`server/c2.db` / `c2_wsl.db`); sessions and CSRF tokens are managed by
-  `server/auth.py` (CSRF secret is per-process, not persisted).
-- Per-agent state on the *agent side*: `--state FILE` (default `~/.c2agent.json`).
-  The agent id is persisted there so restarts keep the same id.
+Sessions + CSRF tokens live in `server/auth.py`; CSRF secret is per-process.
+The DB schema is created idempotently at boot in `server/database.py`.
 
-## The agent build pipeline
+## Build pipeline (touching `server/main.py`)
 
-`main.py` routes `POST /api/build/{language}` and the Generate page
-(`/generate`). Notes that matter when touching it:
+- **Keep `generate_post`/`api_build_agent` sync (non-async).** A compile must
+  run in FastAPI's thread pool, not the event loop. A global `_BUILD_LOCK`
+  serializes builds.
+- **Per-build temp dir** (`tempfile.mkdtemp`). One shared work dir races when
+  the Windows server and a WSL build script run at once (drvfs) — it produced
+  Gradle `R-def.txt missing` and flaky binaries.
+- **Rust pins:** the generated `Cargo.toml` sets `rust-version = "1.80"` and
+  pins `url = "=2.5.2"`, `encoding_rs = "=0.8.35"` — unlocked crates resolve
+  MSRV 1.86+ via `idna_adapter`/`icu`.
+- **Rust host fallback only:** a foreign target with std missing errors out;
+  fallback to the host default *only* when they match.
+- **Cache markers:** `server/builds/wym_<lang>_<target>.<ext>` + `.hash`.
+  A build is reused only while the marker matches `_source_hash(...)`; mobile
+  hashes include the injected config variant.
+- **C# is Windows-only** (`win_x64`/`win_x86`).
+- Per-language runners and the `AGENT_FILES` map live in `server/main.py`;
+  `download`-staged files come from `server/shared/`; agent source is served
+  from `clients/`.
+- Mobile template path must match `clients/mobile/android/app/.../com/wym/c2/`.
 
-- **Do not make `generate_post`/`api_build_agent` `async`.** A compile blocks the
-  event loop; these endpoints are **sync `def`** so FastAPI runs them in the
-  thread pool. There is a global `_BUILD_LOCK` so only one build runs at a time.
-- The Rust fallback: a requested target falls back to the host default target
-  **only** when they match (e.g. `win_x64` on Windows); otherwise the build
-  errors out with a visible banner rather than emitting a mislabeled binary.
-- Build errors are surfaced to the UI via `gen_build_error` + the red banner in
-  `server/templates/generate.html` (`build failed for <target>: <error>`).
-- Each language's toolchain runner lives in `server/main.py` (the builder
-  helpers `_build_binary` / `_build_agent_command` / `_build_installer`); agent
-  source files are served from `clients/`, and staged files for `download`
-  tasks come from `server/shared/`.
+## Tests
 
-## CodeMirror note
+`pytest` suite under `server/tests/` (`test_api.py`, `test_mobile.py`).
 
-The editor in `generate.html`/`explorer.html` is CodeMirror **5.65.16**. Modes
-that use `defineSimpleMode` (rust, go, etc.) require
-`addon/mode/simple.min.js` after `codemirror.min.js`. If a new highlight mode
-is added, include that addon first or `rust.min.js ... defineSimpleMode is not a
-function` appears in the console.
-
-## Tests / verification
-
-There is no unit-test harness baked into the repo yet; verification is a live
-battery:
-
-1. Start a server; register an agent with `--interval 3 --jitter 0`.
-2. Insert `shell` tasks (directly into `tasks` table or via the dashboard) and
-   confirm `exit_code=0`.
-3. Restart the agent and confirm it re-checks-in with the **same** id
-   (`last_seen` advances) — this is the stability check.
-
-A harness that does exactly this (Windows host + WSL guest, both live servers)
-has been used during development; the core loop is:
-
+```bash
+python -m pytest -q            # from the repo root
 ```
-launch agent -> poll DB for new agent row -> insert shell task -> poll result
--> kill -> relaunch with same --state -> confirm same id + fresh last_seen
-```
+
+Covers the agent API/auth, task flow, and mobile builder (icons, naming,
+toolchain guards). Plus a live loop for any touched agent:
+
+1. [ ] Start the server; register an agent with `--interval 3 --jitter 0`.
+2. [ ] Insert a `shell` task; confirm `exit_code=0`.
+3. [ ] Restart the agent; confirm same `agent_id` and advancing `last_seen`.
+4. [ ] Cross-compile the affected language and check the `.hash` marker.
 
 ## Regression lessons (keep these)
 
-- `agent.sh`: `set -u` + top-level `${AGENT_ID}` → **unbound variable** crash.
-  Derive per-id paths lazily (`CLONE_DIR()` in a function), never at file scope.
-- `agent.sh`: `json_get '["agent_id"]'` breaks when `json_get` is `jq -r`
-  (returns the literal array, pretty-printed). Always use dot-paths
-  (`.agent_id`) so jq and the python fallback agree.
-- `agent.py`: argparse rejects tokens starting with `-`. Args with a value
-  (`--token`, `--server`, ...) are pre-normalized to `--foo=bar` before parsing.
+- Rust Linux build: missing system libs (autotools, `libevdev`, X11 dev)
+  surface as `evdev-sys`/`rdev` build.rs panics, not Cargo errors.
+- WSL builds: drive via a real script (`wsl -d Debian bash /mnt/c/.../x.sh`),
+  never inline `-c` quoting — wsl.exe mangles it.
+- `agent.sh`: `set -u` + top-level `${AGENT_ID}` → unbound-variable crash;
+  derive per-id paths lazily inside a function, and use dot-paths (`.agent_id`)
+  so `jq -r` and the python fallback agree.
+- `agent.py`: argparse rejects tokens starting with `-`; pre-normalize
+  `--foo=bar`.
+- Mobile serves disguised names via the `name` param on
+  `/download/build/{lang}`; mobile requests ignore `target` (forced to the
+  language) so the `/download/build/android` URL needs no `target`.
+
+## Key learnings
+
+- The protocol is the contract, not any runtime — keep JSON shapes frozen.
+- Env knobs are the only portable config (flags > env > baked defaults).
+- Fix "missing toolchain" by reading the real build log
+  (`server/builds/logs/`), not by guessing the command.
+- Guard concurrent builds with per-build temp dirs and cache hash markers.

