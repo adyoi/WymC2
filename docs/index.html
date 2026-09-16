@@ -194,10 +194,43 @@
   footer .wrap { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
   footer .mono { color: var(--green-dim); }
 
-  /* ── stat strip (hero) ────────────────────────────────────── */
-  .stat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: clamp(18px, 6vw, 56px); margin-top: 30px; }
-  .stat b { display: block; font-size: clamp(20px, 4vw, 30px); color: var(--green); text-shadow: var(--glow); }
-  .stat span { font-size: 10.5px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  /* ── stat cards (hero) ───────────────────────────────────── */
+  .stat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 16px; margin-top: 34px; }
+  .stat {
+    min-width: 132px;
+    padding: 16px 26px 14px;
+    background: rgba(0,0,0,.35);
+    border: 1px solid var(--green-dark);
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+  }
+  .stat::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    opacity: .65;
+  }
+  .stat b { display: block; font-size: clamp(20px, 3.5vw, 28px); color: var(--green); text-shadow: var(--glow); letter-spacing: 1px; }
+  .stat span {
+    display: inline-block;
+    margin-top: 6px;
+    padding-top: 7px;
+    border-top: 1px dashed var(--line);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .stat:hover {
+    border-color: var(--green);
+    transform: translateY(-2px);
+    box-shadow: 0 0 18px rgba(0,255,136,.12);
+  }
 
   /* ── protocol lifecycle steps ─────────────────────────────── */
   .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }

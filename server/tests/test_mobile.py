@@ -5,6 +5,7 @@ sanitization, and the "unavailable toolchain" failure path that every build
 must hit gracefully on a host without Android/iOS SDKs.
 """
 import re
+import shutil
 import sys
 import time
 from struct import unpack
@@ -15,6 +16,19 @@ import icons
 import main
 
 KNOWN_KINDS = ("pdf", "docx", "xlsx", "pptx", "zip", "rar", "none")
+
+
+@pytest.fixture
+def no_mobile_toolchain(monkeypatch):
+    """Simulate a host without Android/iOS SDKs regardless of the runner."""
+    real_which = shutil.which
+
+    def fake_which(name, *args, **kwargs):
+        if name in ("gradle", "gradle.bat", "xcrun", "xcrun.bat"):
+            return None
+        return real_which(name, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "which", fake_which)
 
 
 def _png_wh(data: bytes) -> tuple[int, int]:
@@ -94,7 +108,7 @@ def test_mobile_hash_includes_variant():
     ("android", "android", "gradle not found"),
     ("ios", "ios", "iOS builds require macOS"),
 ])
-def test_mobile_build_graceful_error_without_toolchain(language, target, msg):
+def test_mobile_build_graceful_error_without_toolchain(no_mobile_toolchain, language, target, msg):
     path, err = main._build_binary(
         language, target, icon="pdf", name="Notes",
         cfg={"server": "http://127.0.0.1:8000", "token": "t", "interval": 10},
@@ -106,13 +120,13 @@ def test_mobile_build_graceful_error_without_toolchain(language, target, msg):
     assert not (main.BUILDS_DIR / main._artifact_name(language, target, ".hash")).is_file()
 
 
-def test_android_build_rejects_desktop_target():
+def test_android_build_rejects_desktop_target(no_mobile_toolchain):
     path, err = main._build_binary("android", "win_x64")
     assert path is None
     assert "gradle not found" in (err or "")
 
 
-def test_unknown_mobile_icon_falls_back_to_none():
+def test_unknown_mobile_icon_falls_back_to_none(no_mobile_toolchain):
     path, err = main._build_binary("ios", "ios", icon="zzz", name="x")
     assert path is None
     assert "iOS builds require macOS" in (err or "")
@@ -132,7 +146,7 @@ def _csrf(client) -> str:
     return re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
 
 
-def test_generate_mobile_page_reports_toolchain_error(client):
+def test_generate_mobile_page_reports_toolchain_error(client, no_mobile_toolchain):
     _login(client)
     page = client.get("/generate").text
     csrf = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
@@ -147,7 +161,7 @@ def test_generate_mobile_page_reports_toolchain_error(client):
     assert "android" in body.lower()
 
 
-def test_build_start_android_job_fails_gracefully(client):
+def test_build_start_android_job_fails_gracefully(client, no_mobile_toolchain):
     _login(client)
     csrf = _csrf(client)
     r = client.post("/api/build/start", json={
