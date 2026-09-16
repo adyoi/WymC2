@@ -90,7 +90,9 @@
     color: var(--green);
     text-shadow: var(--glow), 0 0 42px rgba(0,255,136,.25);
   }
-  .tagline { color: var(--text); font-size: clamp(14px, 2.4vw, 18px); opacity: .85; margin-bottom: 14px; }
+  .tagline { color: var(--text); font-size: clamp(14px, 2.4vw, 18px); opacity: .85; margin-bottom: 10px; }
+  .tagline span { display: block; }
+  .tagline span + span { color: var(--muted); font-size: .9em; }
   .typed-row { margin: 18px auto 0; max-width: 640px; text-align: left; }
   .typed {
     background: rgba(0,0,0,.5);
@@ -260,13 +262,13 @@
   }
 </style>
 </head>
-<body>
+<body id="top">
 <canvas id="matrix"></canvas>
 <div class="grid-bg"></div>
 
 <nav>
   <div class="wrap">
-    <span class="brand">WYM<span class="blink">_</span>C2</span>
+    <a class="brand" href="#top">WYM<span class="blink">_</span>C2</a>
     <ul>
       <li><a href="#why">Why</a></li>
       <li><a href="#tasks">Capabilities</a></li>
@@ -282,19 +284,22 @@
   <div class="wrap">
     <div class="kicker">// What you missed is Command and Control Frameworks</div>
     <h1>WYM C2</h1>
-    <div class="tagline">One wire protocol. One dashboard. Agents in 16 runtimes across Windows, Linux, macOS, Android and iOS.</div>
-    <div class="typed-row">
-      <div class="typed" id="typed"></div>
-    </div>
-    <div class="hero-cta">
-      <a class="btn" href="https://github.com/adyoi/WymC2" target="_blank" rel="noopener">View on GitHub</a>
-      <a class="btn ghost" href="#quickstart">Install &amp; Run</a>
+    <div class="tagline">
+      <span>One wire protocol. One dashboard.</span>
+      <span>Agents in 16 runtimes across Windows, Linux, macOS, Android and iOS.</span>
     </div>
     <div class="stat-row">
       <div class="stat"><b>16</b><span>runtimes</span></div>
       <div class="stat"><b>5</b><span>OS families</span></div>
       <div class="stat"><b>12</b><span>task types</span></div>
       <div class="stat"><b>8</b><span>compiled targets</span></div>
+    </div>
+    <div class="typed-row">
+      <div class="typed" id="typed"></div>
+    </div>
+    <div class="hero-cta">
+      <a class="btn" href="https://github.com/adyoi/WymC2" target="_blank" rel="noopener">View on GitHub</a>
+      <a class="btn ghost" href="#quickstart">Install &amp; Run</a>
     </div>
   </div>
 </header>
