@@ -29,6 +29,9 @@
     --text: #d6f5e8;
     --glow: 0 0 12px rgba(0, 255, 136, .35);
     --mono: "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, "SF Mono", Menlo, monospace;
+    /* spacing scale (4px base) — keep all padding/margin on it */
+    --sp1: 4px; --sp2: 8px; --sp3: 12px; --sp4: 16px; --sp5: 20px; --sp6: 24px;
+    --sp8: 32px; --sp10: 40px; --sp12: 48px; --sp14: 56px; --sp16: 64px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -63,7 +66,7 @@
     -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 20%, transparent 75%);
   }
   #matrix { position: fixed; inset: 0; z-index: -1; opacity: .16; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 var(--sp6); }
 
   /* ── top bar ─────────────────────────────────────────────── */
   nav {
@@ -72,34 +75,33 @@
     background: rgba(3,8,5,.8);
     border-bottom: 1px solid var(--line);
   }
-  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 58px; }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
   .brand { font-weight: 700; letter-spacing: 2px; color: var(--green); text-shadow: var(--glow); }
   .brand .blink { animation: blink 1.1s steps(2) infinite; }
-  nav ul { display: flex; gap: 20px; list-style: none; }
+  nav ul { display: flex; gap: var(--sp5); list-style: none; }
   nav ul a { font-size: 12px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
   nav ul a:hover { color: var(--green); }
   @keyframes blink { 50% { opacity: 0; } }
 
   /* ── hero ────────────────────────────────────────────────── */
-  header { padding: 96px 0 72px; text-align: center; }
-  header .wrap { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+  header { padding: var(--sp14) 0 var(--sp12); text-align: center; }
   .kicker { color: var(--green-dim); letter-spacing: 4px; text-transform: uppercase; font-size: 13px; }
   h1 {
     font-size: clamp(40px, 8vw, 84px);
     letter-spacing: 6px;
-    margin: 0;
+    margin: var(--sp4) 0 var(--sp2);
     color: var(--green);
     text-shadow: var(--glow), 0 0 42px rgba(0,255,136,.25);
   }
-  .tagline { color: var(--text); font-size: clamp(14px, 2.4vw, 18px); opacity: .85; }
+  .tagline { color: var(--text); font-size: clamp(14px, 2.4vw, 18px); opacity: .85; margin-bottom: var(--sp3); }
   .tagline span { display: block; }
   .tagline span + span { color: var(--muted); font-size: .9em; }
-  .typed-row { max-width: 640px; width: 100%; text-align: left; }
+  .typed-row { margin: var(--sp6) auto 0; max-width: 640px; text-align: left; }
   .typed {
     background: rgba(0,0,0,.5);
     border: 1px solid var(--green-dark);
     border-radius: 10px;
-    padding: 16px 20px;
+    padding: var(--sp4) var(--sp5);
     min-height: 120px;
     color: var(--green);
     font-size: 13px;
@@ -108,15 +110,15 @@
   }
   .typed .caret {
     display: inline-block; width: 9px; height: 16px;
-    background: var(--green); vertical-align: -2px; margin-left: 2px;
+    background: var(--green); vertical-align: -2px; margin-left: var(--sp1);
     animation: blink .9s steps(2) infinite;
   }
   .typed .ok { color: var(--cyan); }
-  .hero-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .hero-cta { margin-top: var(--sp6); display: flex; gap: var(--sp4); justify-content: center; flex-wrap: wrap; }
   .btn {
     border: 1px solid var(--green-dark);
     color: var(--green);
-    padding: 11px 20px;
+    padding: var(--sp3) var(--sp5);
     border-radius: 8px;
     font-size: 13px;
     letter-spacing: 1px;
@@ -129,34 +131,34 @@
   .btn.ghost:hover { color: var(--cyan); border-color: var(--cyan); background: rgba(77,232,255,.06); }
 
   /* ── sections ────────────────────────────────────────────── */
-  section { padding: 54px 0; }
-  .sec-head { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+  section { padding: var(--sp14) 0; }
+  .sec-head { display: flex; align-items: center; gap: var(--sp3); margin-bottom: var(--sp8); }
   .sec-head .sig { color: var(--green-dark); font-size: 18px; }
   .sec-head h2 { font-size: 20px; letter-spacing: 3px; text-transform: uppercase; color: var(--green); }
   .sec-head .line { flex: 1; height: 1px; background: linear-gradient(90deg, var(--green-dark), transparent); }
 
-  .grid { display: grid; gap: 14px; }
+  .grid { display: grid; gap: var(--sp5); }
   .g3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
   .g2 { grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); }
   .card {
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 12px;
-    padding: 18px 18px;
+    padding: var(--sp5);
     transition: all .18s ease;
   }
   .card:hover { border-color: var(--green-dark); box-shadow: var(--glow); transform: translateY(-2px); }
-  .card h3 { font-size: 13px; letter-spacing: 1px; color: var(--green-dim); text-transform: uppercase; margin-bottom: 10px; }
+  .card h3 { font-size: 13px; letter-spacing: 1px; color: var(--green-dim); text-transform: uppercase; margin-bottom: var(--sp3); }
   .card h3::before { content: "▸ "; color: var(--green-dark); }
   .card p { font-size: 12.5px; color: var(--muted); }
   .card code { color: var(--cyan); font-size: 11.5px; }
 
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--sp2); }
   .chip {
     border: 1px solid var(--green-dark);
     color: var(--green-dim);
     border-radius: 20px;
-    padding: 5px 12px;
+    padding: 6px var(--sp4);
     font-size: 12px;
     letter-spacing: .5px;
     background: rgba(0,255,136,.04);
@@ -164,8 +166,8 @@
   .chip.compiled { border-color: var(--cyan); color: var(--cyan); background: rgba(77,232,255,.05); }
   .chip .tag { font-size: 9px; vertical-align: super; opacity: .6; }
 
-  .proto { background: rgba(0,0,0,.5); border: 1px solid var(--green-dark); border-radius: 10px; padding: 8px 0; overflow: hidden; }
-  .proto .l { padding: 7px 18px; font-size: 12.5px; border-left: 3px solid transparent; transition: all .15s ease; }
+  .proto { background: rgba(0,0,0,.5); border: 1px solid var(--green-dark); border-radius: 10px; padding: var(--sp2) 0; overflow: hidden; }
+  .proto .l { padding: 10px var(--sp6); font-size: 12.5px; border-left: 3px solid transparent; transition: all .15s ease; }
   .proto .l b { color: var(--green); }
   .proto .l:hover { border-left-color: var(--green); background: rgba(0,255,136,.06); }
   .proto .req { color: var(--cyan); }
@@ -174,7 +176,7 @@
     background: #040d08;
     border: 1px solid var(--green-dark);
     border-radius: 10px;
-    padding: 16px 18px;
+    padding: var(--sp4) var(--sp5);
     overflow-x: auto;
     font-size: 12.5px;
     color: var(--green);
@@ -187,21 +189,21 @@
     border-left: 3px solid var(--cyan);
     background: rgba(77,232,255,.05);
     color: var(--muted);
-    padding: 14px 18px;
+    padding: var(--sp4) var(--sp5);
     border-radius: 0 10px 10px 0;
     font-size: 12.5px;
   }
   blockquote.warn b { color: var(--cyan); }
 
-  footer { padding: 40px 0 70px; border-top: 1px solid var(--line); margin-top: 20px; }
-  footer .wrap { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  footer { padding: var(--sp14) 0 var(--sp16); border-top: 1px solid var(--line); margin-top: var(--sp5); }
+  footer .wrap { display: flex; justify-content: space-between; gap: var(--sp4); flex-wrap: wrap; color: var(--muted); font-size: 12px; }
   footer .mono { color: var(--green-dim); }
 
   /* ── stat cards (hero) ───────────────────────────────────── */
-  .stat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 16px; }
+  .stat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--sp5); margin-top: var(--sp8); }
   .stat {
     min-width: 132px;
-    padding: 16px 26px 14px;
+    padding: var(--sp5) var(--sp8) var(--sp4);
     background: rgba(0,0,0,.35);
     border: 1px solid var(--green-dark);
     border-radius: 12px;
@@ -221,8 +223,8 @@
   .stat b { display: block; font-size: clamp(20px, 3.5vw, 28px); color: var(--green); text-shadow: var(--glow); letter-spacing: 1px; }
   .stat span {
     display: inline-block;
-    margin-top: 6px;
-    padding-top: 7px;
+    margin-top: var(--sp2);
+    padding-top: var(--sp2);
     border-top: 1px dashed var(--line);
     font-size: 10px;
     letter-spacing: 2px;
@@ -236,15 +238,15 @@
   }
 
   /* ── protocol lifecycle steps ─────────────────────────────── */
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
-  .step { background: rgba(0,0,0,.35); border: 1px solid var(--line); border-left: 3px solid var(--green-dark); border-radius: 10px; padding: 12px 14px; }
-  .step b { display: block; color: var(--green-dim); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp3); margin-bottom: var(--sp5); }
+  .step { background: rgba(0,0,0,.35); border: 1px solid var(--line); border-left: 3px solid var(--green-dark); border-radius: 10px; padding: var(--sp4); }
+  .step b { display: block; color: var(--green-dim); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: var(--sp2); }
   .step p { font-size: 11.5px; color: var(--muted); }
   .step code { color: var(--cyan); }
 
   /* ── env fallback table ───────────────────────────────────── */
-  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  table { width: 100%; border-collapse: collapse; margin-top: var(--sp4); font-size: 12px; }
+  th, td { text-align: left; padding: var(--sp2) var(--sp4); border-bottom: 1px solid var(--line); }
   th { color: var(--green-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
   td code { color: var(--cyan); font-size: 11.5px; }
 
@@ -255,10 +257,10 @@
   }
 
   @media (max-width: 640px) {
-    nav .wrap { flex-wrap: wrap; gap: 4px 14px; height: auto; padding: 10px 0; }
-    nav ul { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; }
+    nav .wrap { flex-wrap: wrap; gap: var(--sp1) var(--sp4); height: auto; padding: var(--sp3) 0; }
+    nav ul { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px var(--sp4); }
     nav ul a { font-size: 11px; }
-    header { padding: 64px 0 48px; }
+    header { padding: var(--sp10) 0 var(--sp8); }
     .g2 { grid-template-columns: 1fr; }
   }
 </style>
@@ -357,21 +359,21 @@
         <span class="chip">ruby</span><span class="chip">perl</span>
       </div>
     </div>
-    <div class="card" style="margin-top:14px;">
+    <div class="card" style="margin-top:var(--sp4);">
       <h3>Compiled agents — cross-compiled server-side</h3>
       <div class="chips">
         <span class="chip compiled">go</span><span class="chip compiled">rust</span>
         <span class="chip compiled">c</span><span class="chip compiled">c++</span>
         <span class="chip compiled">c#</span><span class="chip compiled">java<span class="tag">&nbsp;jar</span></span>
       </div>
-      <p style="margin-top:12px;">Targets are validated against the platform: C# binaries build only for Windows (<code>wym_csharp_win_x64.exe</code> / <code>wym_csharp_win_x86.exe</code>). Every artifact is named <code>wym_&lt;lang&gt;_&lt;os&gt;_&lt;arch&gt;.&lt;ext&gt;</code>.</p>
+      <p style="margin-top:var(--sp3);">Targets are validated against the platform: C# binaries build only for Windows (<code>wym_csharp_win_x64.exe</code> / <code>wym_csharp_win_x86.exe</code>). Every artifact is named <code>wym_&lt;lang&gt;_&lt;os&gt;_&lt;arch&gt;.&lt;ext&gt;</code>.</p>
     </div>
-    <div class="card" style="margin-top:14px;">
+    <div class="card" style="margin-top:var(--sp4);">
       <h3>Mobile agents — APK / IPA from the dashboard</h3>
       <div class="chips">
         <span class="chip compiled">android&nbsp;apk</span><span class="chip compiled">ios&nbsp;ipa</span>
       </div>
-      <p style="margin-top:12px;">Android builds need Gradle + the Android SDK on the server; iOS requires macOS with Xcode. Both accept a custom artifact name and a disguise launcher icon (PDF &middot; DOCX &middot; XLSX &middot; PPTX &middot; ZIP &middot; RAR).</p>
+      <p style="margin-top:var(--sp3);">Android builds need Gradle + the Android SDK on the server; iOS requires macOS with Xcode. Both accept a custom artifact name and a disguise launcher icon (PDF &middot; DOCX &middot; XLSX &middot; PPTX &middot; ZIP &middot; RAR).</p>
     </div>
   </section>
 
@@ -402,7 +404,7 @@
       <div class="l"><span class="req">POST /api/result</span> — task_id, output, exit_code, optional error <span class="cells">→ ack; unacked are re-sent</span></div>
       <div class="l"><span class="req">404 on checkin</span> — the id was lost server-side <span class="cells">→ re-register automatically</span></div>
     </div>
-    <p style="color:var(--muted);font-size:12.5px;margin-top:14px;">Full spec: <a href="https://github.com/adyoi/WymC2/blob/master/PROTOCOL.md" target="_blank" rel="noopener">PROTOCOL.md</a> · agent guide: <a href="https://github.com/adyoi/WymC2/blob/master/AGENTS.md" target="_blank" rel="noopener">AGENTS.md</a> · build &amp; run: <a href="https://github.com/adyoi/WymC2/blob/master/DEVELOPMENT.md" target="_blank" rel="noopener">DEVELOPMENT.md</a></p>
+    <p style="color:var(--muted);font-size:12.5px;margin-top:var(--sp4);">Full spec: <a href="https://github.com/adyoi/WymC2/blob/master/PROTOCOL.md" target="_blank" rel="noopener">PROTOCOL.md</a> · agent guide: <a href="https://github.com/adyoi/WymC2/blob/master/AGENTS.md" target="_blank" rel="noopener">AGENTS.md</a> · build &amp; run: <a href="https://github.com/adyoi/WymC2/blob/master/DEVELOPMENT.md" target="_blank" rel="noopener">DEVELOPMENT.md</a></p>
   </section>
 
   <section id="quickstart">
@@ -415,7 +417,7 @@
 
 <span class="cm"># Linux / macOS</span>
 <span class="pf">$</span> bash install.sh</pre>
-    <pre class="cmd" style="margin-top:14px;"><span class="cm"># Run an agent against your server (any supported runtime)</span>
+    <pre class="cmd" style="margin-top:var(--sp4);"><span class="cm"># Run an agent against your server (any supported runtime)</span>
 <span class="pf">$</span> python agent.py  --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
 <span class="pf">$</span> node   agent.js  --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
 <span class="pf">$</span> go run agent.go   --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
@@ -431,7 +433,7 @@
       <tr><td><code>WYM_STATE_FILE</code></td><td><code>--state</code></td><td>JSON state path (default <code>~/.wymagent.json</code>)</td></tr>
       <tr><td><code>WYM_VERBOSE</code></td><td><code>--verbose</code></td><td>set to <code>1</code> or <code>true</code></td></tr>
     </table>
-    <blockquote class="warn" style="margin-top:18px;">
+    <blockquote class="warn" style="margin-top:var(--sp5);">
       <b>Authorized use only.</b> This is a dual-use security framework. Use it exclusively against
       systems you own or with explicit written authorization. It ships <b>no evasion and no stealth</b> —
       plain HTTP, plaintext-friendly wire format — and operators opt into <code>persistence</code>,
