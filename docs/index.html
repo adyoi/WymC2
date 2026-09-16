@@ -82,18 +82,19 @@
 
   /* ── hero ────────────────────────────────────────────────── */
   header { padding: 96px 0 72px; text-align: center; }
+  header .wrap { display: flex; flex-direction: column; align-items: center; gap: 24px; }
   .kicker { color: var(--green-dim); letter-spacing: 4px; text-transform: uppercase; font-size: 13px; }
   h1 {
     font-size: clamp(40px, 8vw, 84px);
     letter-spacing: 6px;
-    margin: 14px 0 6px;
+    margin: 0;
     color: var(--green);
     text-shadow: var(--glow), 0 0 42px rgba(0,255,136,.25);
   }
-  .tagline { color: var(--text); font-size: clamp(14px, 2.4vw, 18px); opacity: .85; margin-bottom: 10px; }
+  .tagline { color: var(--text); font-size: clamp(14px, 2.4vw, 18px); opacity: .85; }
   .tagline span { display: block; }
   .tagline span + span { color: var(--muted); font-size: .9em; }
-  .typed-row { margin: 18px auto 0; max-width: 640px; text-align: left; }
+  .typed-row { max-width: 640px; width: 100%; text-align: left; }
   .typed {
     background: rgba(0,0,0,.5);
     border: 1px solid var(--green-dark);
@@ -111,7 +112,7 @@
     animation: blink .9s steps(2) infinite;
   }
   .typed .ok { color: var(--cyan); }
-  .hero-cta { margin-top: 26px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .hero-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .btn {
     border: 1px solid var(--green-dark);
     color: var(--green);
@@ -197,7 +198,7 @@
   footer .mono { color: var(--green-dim); }
 
   /* ── stat cards (hero) ───────────────────────────────────── */
-  .stat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 16px; margin-top: 34px; }
+  .stat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 16px; }
   .stat {
     min-width: 132px;
     padding: 16px 26px 14px;
