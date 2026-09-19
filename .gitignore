@@ -57,6 +57,13 @@ clients/lib64
 Thumbs.db
 desktop.ini
 
+# Java / Android (local or generated)
+*.iml
+local.properties
+.gradle/
+clients/mobile/android/gradle/
+clients/mobile/android/gradle.properties
+
 # IDE
 .vscode/
 .idea/

