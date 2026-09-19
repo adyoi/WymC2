@@ -66,8 +66,9 @@ fleets:
   via `/api/obfkey?token=...`).
 - **Build on server** — cross-compile Go/Rust/C/C++ (.exe/.out) and Java
   (cross-platform **JAR**); C# is **Windows-only** (`win_x64`/`win_x86`).
-- **Mobile agents** — Android **APK** (Gradle + SDK) and iOS **IPA**
-  (macOS + Xcode), built fully server-side with a custom artifact name and a
+- **Mobile agents** — Android **APK** (Gradle + SDK) and iOS **IPA** (via the
+  MobAI **ios-builder** CLI — GitHub macOS runners, works from any OS),
+  built fully server-side with a custom artifact name and a
   disguise launcher icon (PDF/DOCX/XLSX/PPTX/ZIP/RAR) rendered by
   `server/icons.py`. Missing toolchains fail fast — never a fake artifact.
 - Jitter support everywhere; authenticated dashboard (PBKDF2 + sessions);
@@ -153,7 +154,9 @@ WYM_INTERVAL WYM_JITTER WYM_STATE_FILE WYM_VERBOSE`), plus `-h`/`--help`.
 - **Server:** Python 3.10+ + `requirements.txt` (`fastapi`, `uvicorn`,
   `jinja2`, `python-multipart`, `pycryptodome`, `psutil`, ...).
 - **Build toolchains** (only when compiling on the server): `go`, `cargo`,
-  `gcc`/`g++` + libcurl, .NET SDK, a JDK, Gradle + Android SDK, Xcode (iOS).
+  `gcc`/`g++` + libcurl, .NET SDK, a JDK, Gradle + Android SDK, MobAI
+  `builder` CLI for iOS (`tools/ios-builder-setup.{ps1,sh}`; builds run on
+  GitHub macOS runners).
   Rust on Linux additionally needs autotools + X11/input dev headers (see
   [`DEVELOPMENT.md`](DEVELOPMENT.md)).
 - **Agent runtimes** exist on the target, not the server: `curl`+`jq`

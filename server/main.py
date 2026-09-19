@@ -2345,6 +2345,67 @@ def _inject_file(path: Path, pairs: dict[str, str]) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _build_ios_with_builder(work: Path, icon_kind: str, app_name: str, server: str,
+                            token: str, interval: int, note) -> str | None:
+    """Build the IPA remotely via the MobAI ios-builder CLI (github.com/MobAI-App).
+
+    ios-builder snapshots the whole repo working tree, compiles on a GitHub macOS
+    runner (xcodebuild via the committed workflow) and drops the IPA into ./dist/.
+    The config/icon values are baked into the committed template in place, then
+    restored in the finally block. Callers must hold _BUILD_LOCK (serialized), so
+    no concurrent build can observe the injected state. None = ok."""
+    template = CLIENTS_DIR / "mobile" / "ios"
+    if not (template / "project.yml").is_file():
+        return ("Xcode project manifest missing (clients/mobile/ios/project.yml) "
+                "— run the iOS-builder setup (tools/ios-builder-setup)")
+    cfg = template / "WymC2" / "Config.swift"
+    plist = template / "WymC2" / "Info.plist"
+    if not cfg.is_file() or not plist.is_file():
+        return "iOS template incomplete (Config.swift/Info.plist missing)"
+    # The builder pushes the working tree, so bake in place and restore after.
+    pristine: dict[Path, bytes | None] = {cfg: cfg.read_bytes(), plist: plist.read_bytes()}
+    try:
+        _inject_file(cfg, {"@@APP_NAME@@": _swift_escape(app_name),
+                           "@@SERVER@@": _swift_escape(server),
+                           "@@TOKEN@@": _swift_escape(token),
+                           "@@INTERVAL@@": str(max(1, int(interval)))})
+        _inject_file(plist, {"@@APP_NAME@@": _xml_escape(app_name)})
+        # icons must land next to the sources so XcodeGen copies them to the
+        # bundle root, where CFBundleIconFiles expects them
+        want = {"AppIcon-60@2x.png", "AppIcon-60@3x.png",
+                "AppIcon-76@2x.png", "AppIcon-83.5@2x.png"}
+        for fname, (_px, png) in icons.ios_appicons(icon_kind).items():
+            if fname in want:
+                dest = template / "WymC2" / fname
+                pristine[dest] = dest.read_bytes() if dest.is_file() else None
+                dest.write_bytes(png)
+        note(f"icon '{icon_kind}' rendered; label '{app_name}'")
+        note("building iOS via MobAI ios-builder (GitHub macOS runner) ...")
+        cmd = [shutil.which("builder") or "builder", "ios", "build",
+               "--unsigned", "--timeout", "30m"]
+        rc, out = _run_build_cmd(cmd, cwd=PROJECT_DIR, on_line=note, timeout=2400)
+        if rc != 0:
+            tail = [ln for ln in out.splitlines() if ln.strip()]
+            return tail[-1] if tail else "ios-builder exited non-zero"
+        ipa = None
+        dist = PROJECT_DIR / "dist"
+        if dist.is_dir():
+            cands = sorted(dist.rglob("*.ipa"))
+            if cands:
+                ipa = cands[0]
+        if ipa is None:
+            return "ios-builder finished but produced no IPA in ./dist/"
+        shutil.copy2(ipa, work / "wym.ipa")
+        return None
+    finally:
+        for _path, data in pristine.items():
+            if data is None:
+                _path.unlink(missing_ok=True)
+            else:
+                _path.write_bytes(data)
+        shutil.rmtree(PROJECT_DIR / "dist", ignore_errors=True)
+
+
 def _build_android_apk(work: Path, icon_kind: str, app_name: str, server: str,
                        token: str, interval: int, note) -> str | None:
     """Copy the android template, bake config + assets, run Gradle. None = ok."""
@@ -2387,8 +2448,16 @@ def _build_android_apk(work: Path, icon_kind: str, app_name: str, server: str,
 
 def _build_ios_ipa(work: Path, icon_kind: str, app_name: str, server: str,
                    token: str, interval: int, note) -> str | None:
-    """Copy the ios template, bake config, compile with xcrun swiftc, zip the
-    Payload dir with ditto (or zip). None = ok."""
+    """IPA build for the ios target. Uses the MobAI ios-builder CLI when
+    available (remote GitHub macOS builds — works on any host); otherwise falls
+    back to the local xcrun swiftc path on a macOS server. None = ok."""
+    builder = (shutil.which("builder") or shutil.which("builder.exe")
+               or shutil.which("builder.bat"))
+    if builder:
+        return _build_ios_with_builder(work, icon_kind, app_name, server, token,
+                                       interval, note)
+
+    # Legacy local build: macOS + Xcode Command Line Tools only.
     src = CLIENTS_DIR / "mobile" / "ios"
     if not src.is_dir():
         return "mobile ios template not found"
@@ -2420,7 +2489,9 @@ def _build_ios_ipa(work: Path, icon_kind: str, app_name: str, server: str,
 
     xcrun = shutil.which("xcrun") or shutil.which("xcrun.bat")
     if not xcrun:
-        return "iOS builds require macOS with Xcode Command Line Tools"
+        return ("iOS builds require the ios-builder CLI "
+                "(https://github.com/MobAI-App/ios-builder) for remote GitHub "
+                "macOS builds, or a macOS server with Xcode Command Line Tools")
     sdk_proc = subprocess.run([xcrun, "--sdk", "iphoneos", "--show-sdk-path"],
                               capture_output=True, text=True, timeout=60)
     if sdk_proc.returncode != 0:

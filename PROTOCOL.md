@@ -176,7 +176,7 @@ Used by `/generate` → "build on server".
 | .NET SDK  | `winget install Microsoft.DotNet.SDK.8` | `apt-get install dotnet-sdk-8.0` / `./dotnet-install.sh` | `brew install dotnet` | C# → Windows RIDs only |
 | Java      | Oracle JDK / `winget install Oracle.JDK` | `openjdk-17-jdk` | `brew install openjdk` | cross-platform JAR |
 | Android   | Android Studio / SDK cmdline-tools | same (any OS) | same | `gradle` + `ANDROID_HOME`/`ANDROID_SDK_ROOT`; template `clients/mobile/android` |
-| iOS       | — | — | `xcode-select --install` | `xcrun swiftc`, macOS only |
+| iOS       | `tools/ios-builder-setup.ps1` | `tools/ios-builder-setup.sh` | `xcode-select --install` | `builder` (MobAI ios-builder, any OS → GitHub macOS runner); macOS fallback: `xcrun swiftc` |
 
 On Linux/macOS the bundled `dotnet-install.sh` installs the SDK to `~/.dotnet`
 without root and persists `PATH`; the server probes `~/.dotnet` directly.

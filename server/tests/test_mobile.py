@@ -20,11 +20,13 @@ KNOWN_KINDS = ("pdf", "docx", "xlsx", "pptx", "zip", "rar", "none")
 
 @pytest.fixture
 def no_mobile_toolchain(monkeypatch):
-    """Simulate a host without Android/iOS SDKs regardless of the runner."""
+    """Simulate a host without Android/iOS SDKs or the ios-builder CLI,
+    regardless of the runner."""
     real_which = shutil.which
 
     def fake_which(name, *args, **kwargs):
-        if name in ("gradle", "gradle.bat", "xcrun", "xcrun.bat"):
+        if name in ("gradle", "gradle.bat", "xcrun", "xcrun.bat",
+                    "builder", "builder.exe", "builder.bat"):
             return None
         return real_which(name, *args, **kwargs)
 
@@ -106,7 +108,7 @@ def test_mobile_hash_includes_variant():
 
 @pytest.mark.parametrize("language,target,msg", [
     ("android", "android", "gradle not found"),
-    ("ios", "ios", "iOS builds require macOS"),
+    ("ios", "ios", "ios-builder"),
 ])
 def test_mobile_build_graceful_error_without_toolchain(no_mobile_toolchain, language, target, msg):
     path, err = main._build_binary(
@@ -129,7 +131,64 @@ def test_android_build_rejects_desktop_target(no_mobile_toolchain):
 def test_unknown_mobile_icon_falls_back_to_none(no_mobile_toolchain):
     path, err = main._build_binary("ios", "ios", icon="zzz", name="x")
     assert path is None
-    assert "iOS builds require macOS" in (err or "")
+    assert "ios-builder" in (err or "")
+
+
+# ---------------------------------------------------------------------------
+# ios-builder (MobAI) backend
+# ---------------------------------------------------------------------------
+
+def _fake_builder_cli(monkeypatch, which_name):
+    monkeypatch.setattr(
+        shutil, "which",
+        lambda name, *a, **k: which_name if name in ("builder", "builder.exe", "builder.bat") else None)
+
+def _template_cfg() -> bytes:
+    return (main.CLIENTS_DIR / "mobile" / "ios" / "WymC2" / "Config.swift").read_bytes()
+
+def _stray_appicons() -> list:
+    return [f for f in (main.CLIENTS_DIR / "mobile" / "ios" / "WymC2").glob("AppIcon-*.png")]
+
+
+def test_ios_builder_mode_error_surfaces_and_restores_tree(monkeypatch, tmp_path):
+    _fake_builder_cli(monkeypatch, "builder")
+    dist = main.PROJECT_DIR / "dist"
+    dist.mkdir(parents=True, exist_ok=True)  # leftover scratch from a prior run
+    (dist / "WymC2.ipa").write_bytes(b"junk")
+    cfg_before = _template_cfg()
+    monkeypatch.setattr(main, "_run_build_cmd",
+                        lambda *a, **k: (2, "fatal: workflow ios-build.yml missing"))
+
+    path, err = main._build_binary(
+        "ios", "ios", icon="pdf", name="Notes",
+        cfg={"server": "http://127.0.0.1:8000", "token": "t", "interval": 10})
+
+    assert path is None
+    assert "ios-build.yml" in (err or "")
+    assert _template_cfg() == cfg_before          # baked values restored
+    assert _stray_appicons() == []                # generated icons removed
+    assert not dist.exists()                      # scratch cleaned up
+
+
+def test_ios_builder_mode_success_copies_ipa(monkeypatch, tmp_path):
+    _fake_builder_cli(monkeypatch, "builder.bat")
+    monkeypatch.setattr(main, "BUILDS_DIR", tmp_path)
+    dist = main.PROJECT_DIR / "dist"
+    dist.mkdir(parents=True, exist_ok=True)
+    (dist / "WymC2.ipa").write_bytes(b"\x50K\x03\x04fakeipa")
+    cfg_before = _template_cfg()
+    monkeypatch.setattr(main, "_run_build_cmd", lambda *a, **k: (0, "build ok"))
+
+    path, err = main._build_binary(
+        "ios", "ios", icon="none", name="X",
+        cfg={"server": "http://127.0.0.1:8000", "token": "t", "interval": 10})
+
+    assert err == ""
+    assert path is not None and path.name == "wym_ios.ipa"
+    assert path.read_bytes() == b"\x50K\x03\x04fakeipa"
+    assert _template_cfg() == cfg_before
+    assert _stray_appicons() == []
+    assert not dist.exists()
 
 
 # ---------------------------------------------------------------------------

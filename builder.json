@@ -1,0 +1,9 @@
+{
+  "project": "WymC2",
+  "ios": {
+    "path": "clients/mobile/ios",
+    "scheme": "WymC2",
+    "bundleId": "com.wym.c2",
+    "configuration": "Release"
+  }
+}
