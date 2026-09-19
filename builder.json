@@ -1,9 +1,22 @@
 {
   "project": "WymC2",
+  "platform": "ios",
+  "github": {
+    "owner": "adyoi",
+    "repo": "WymC2"
+  },
+  "codemagic": {},
+  "bitrise": {},
   "ios": {
     "path": "clients/mobile/ios",
     "scheme": "WymC2",
     "bundleId": "com.wym.c2",
     "configuration": "Release"
-  }
+  },
+  "flutter": {
+    "watch": {}
+  },
+  "reactNative": {},
+  "kmp": {},
+  "mobai": {}
 }
