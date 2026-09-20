@@ -19,7 +19,9 @@ def _default_db_name() -> str:
 
 DB_PATH = os.environ.get("WYM_DB_PATH", os.path.join(BASE_DIR, _default_db_name()))
 # ensure parent dir exists for a custom DB location
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True) if os.path.dirname(DB_PATH) else None
+_db_dir = os.path.dirname(DB_PATH)
+if _db_dir:
+    os.makedirs(_db_dir, exist_ok=True)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -89,6 +91,11 @@ def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL + longer busy timeout so concurrent agent checkins from a large
+    # fleet don't hit `database is locked` on write bursts.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=15000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 

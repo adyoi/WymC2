@@ -147,6 +147,8 @@ function Test-BuilderTools {
         "Rust (cargo)"             = @("winget install --id Rustlang.Rustup -e","scoop install rustup")
         "C/C++ (gcc/g++)"          = @("winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e","scoop install mingw")
         ".NET SDK"                 = @("winget install --id Microsoft.DotNet.SDK.8 -e","scoop install dotnet-sdk")
+        "Android (gradle + Android SDK)" = @("winget install --id Google.AndroidStudio -e","scoop install android-studio","or set ANDROID_HOME / ANDROID_SDK_ROOT to the Android SDK dir")
+        "iOS builder (MobAI ios-builder)" = @("run:  .\tools\ios-builder-setup.ps1   (installs builder.exe, gh auth, builder init)")
     }
     $missing = @()
     foreach ($r in $rules) {
@@ -157,6 +159,28 @@ function Test-BuilderTools {
         if ($hit) { Ok "$($r.label) ($hit)" }
         else { Warn "$($r.label) NOT FOUND"; $missing += $r.label }
     }
+
+    # Android — needs gradle AND an SDK dir to be usable for APK builds.
+    $gradle = $null
+    foreach ($n in @("gradle", "gradle.bat")) {
+        if (Get-Command $n -ErrorAction SilentlyContinue) { $gradle = $n; break }
+    }
+    $sdkEnv = [bool]($env:ANDROID_HOME -or $env:ANDROID_SDK_ROOT)
+    if ($gradle -and $sdkEnv) { Ok "Android (gradle: $gradle, SDK configured)" }
+    elseif ($gradle)  { Warn "Android (gradle found but ANDROID_HOME / ANDROID_SDK_ROOT unset)"; $missing += "Android (gradle + Android SDK)" }
+    elseif ($sdkEnv)  { Warn "Android (SDK env set but gradle NOT FOUND)"; $missing += "Android (gradle + Android SDK)" }
+    else              { Warn "Android (gradle + Android SDK) NOT FOUND"; $missing += "Android (gradle + Android SDK)" }
+
+    # iOS — the MobAI ios-builder CLI is the only path on Windows/most hosts;
+    # a macOS server without it falls back to xcrun locally (see uninstall vs
+    # iOS, and tools/ios-builder-setup.*). Reported once here.
+    $iosBuilder = $null
+    foreach ($n in @("builder", "builder.exe", "builder.bat")) {
+        if (Get-Command $n -ErrorAction SilentlyContinue) { $iosBuilder = $n; break }
+    }
+    if ($iosBuilder) { Ok "iOS (MobAI ios-builder: $iosBuilder)" }
+    else { Warn "iOS builder (MobAI ios-builder) NOT FOUND"; $missing += "iOS builder (MobAI ios-builder)" }
+
     if ($missing.Count -gt 0) {
         Warn "Missing builder tools (install to enable server-side builds):"
         foreach ($m in $missing) {

@@ -237,6 +237,38 @@ check_toolchain() {
         printf '        or run:  %s   (installs to ~/.dotnet)\n' "$ROOT/dotnet-install.sh"
     fi
 
+    # Android — needs gradle AND an SDK dir to build APKs.
+    gradle_cmd=""
+    for n in gradle gradle.bat; do
+        if have "$n"; then gradle_cmd="$n"; break; fi
+    done
+    if [ -n "$gradle_cmd" ] && { [ -n "${ANDROID_HOME:-}" ] || [ -n "${ANDROID_SDK_ROOT:-}" ]; }; then
+        ok "Android (gradle: $gradle_cmd, SDK configured)"
+    elif [ -n "$gradle_cmd" ]; then
+        missing_tool "Android (gradle + Android SDK)"
+        printf '        gradle found but ANDROID_HOME / ANDROID_SDK_ROOT are unset\n'
+        printf '        -> install Android Studio (any OS) and export ANDROID_HOME\n'
+    elif [ -n "${ANDROID_HOME:-}" ] || [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+        missing_tool "Android (gradle + Android SDK)"
+        printf '        SDK env set but gradle is missing\n'
+        hint gradle gradle
+    else
+        missing_tool "Android (gradle + Android SDK)"
+        hint gradle gradle/
+        printf '        or install Android Studio (any OS) and export ANDROID_HOME\n'
+    fi
+
+    # iOS — the MobAI ios-builder CLI builds remotely from any host; a bare
+    # macOS server falls back to a local xcrun build.
+    if have builder; then
+        ok "iOS (MobAI ios-builder: $(command -v builder))"
+    elif [ "$(uname -s)" = "Darwin" ] && { have xcrun || have xcodebuild; }; then
+        ok "iOS (macOS local build: $(command -v xcrun 2>/dev/null || command -v xcodebuild))"
+    else
+        missing_tool "iOS builder (MobAI ios-builder)"
+        printf '        or run:  %s/tools/ios-builder-setup.sh   (installs builder, gh auth, init)\n' "$ROOT"
+    fi
+
     if [ "$missing_count" -gt 0 ]; then
         warn "Missing builder tools (install to enable server-side builds):"
         for m in "${missing[@]}"; do warn "  - $m"; done

@@ -25,7 +25,9 @@ Removes (Linux/macOS/WSL artifacts only):
   server/.agent_token_wsl                 (agent token)
   server/.server.pid_wsl, .server.port_wsl
   server/server_wsl.log
-  server/builds and __pycache__ dirs      (build artifacts; builds/ is shared)
+  server/shared, server/collected        (staged/pulled agent files)
+  server/builds and __pycache__ dirs     (build artifacts; builds/ is shared)
+  ./dist                                  (iOS-builder output, if any)
 
 Windows artifacts (.venv, wym.db, .agent_token, .server.pid/.server.port,
 server.log) are left untouched.
@@ -119,6 +121,9 @@ rm_file "$SERVER/.agent_token_wsl"
 rm_file "$SERVER/wym_wsl.db"
 rm_dir "$SERVER/.venv-wsl"
 rm_dir "$SERVER/builds"
+rm_dir "$SERVER/shared"
+rm_dir "$SERVER/collected"
+rm_dir "$ROOT/dist"
 
 log "Cleaning Python bytecode caches"
 find "$SERVER" -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true

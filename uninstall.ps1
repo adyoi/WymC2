@@ -6,12 +6,14 @@
 
 .DESCRIPTION
     Removes the artifacts created on this platform (Windows) plus the
-    platform-neutral builds/ output:
+    platform-neutral state and build output:
       server\.venv                          (virtualenv)
-      server\wym.db                          (database)
+      server\wym.db                         (database)
       server\.agent_token, server\server.log, server\server.err.log
       server\.server.pid, server\.server.port
-      server\builds and __pycache__ folders (build artifacts)
+      server\shared, server\collected       (staged/pulled agent files)
+      server\builds and __pycache__         (build artifacts)
+      dist\                                (iOS-builder output, if any)
 
     Unix/WSL artifacts (.venv-wsl, wym_wsl.db, .agent_token_wsl,
     .server.pid/.port_wsl, server_wsl.log) are left untouched.
@@ -106,13 +108,20 @@ foreach ($f in $files) {
 }
 $dirs = @(
     (Join-Path $Server ".venv"),
-    (Join-Path $Server "builds")
+    (Join-Path $Server "builds"),
+    (Join-Path $Server "shared"),
+    (Join-Path $Server "collected")
 )
 foreach ($d in $dirs) {
     if (Test-Path -LiteralPath $d) {
         Remove-Item -LiteralPath $d -Recurse -Force
         Info "removed $d"
     }
+}
+$Dist = Join-Path $Root "dist"
+if (Test-Path -LiteralPath $Dist) {
+    Remove-Item -LiteralPath $Dist -Recurse -Force
+    Info "removed $Dist"
 }
 
 Hdr "Cleaning Python bytecode caches"

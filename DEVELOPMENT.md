@@ -32,7 +32,10 @@ sudo apt-get install autoconf automake libtool libevdev-dev \
 ```
 
 **Android template** (`clients/mobile/android/`) is a minimal Gradle project
-(package `com.wym.c2`, no external deps, `assembleRelease`). iOS
+(package `com.wym.c2`, no external deps, `assembleRelease`). AGP 8.2.2 needs
+**Gradle 8.x** — Gradle 9 is incompatible — so build the server's Android SDK
+path with Gradle 8.2–8.x (the checked-in template has no gradle wrapper; the
+server uses the `gradle` on PATH). iOS
 (`clients/mobile/ios/`) builds with the **MobAI ios-builder** CLI on any host —
 it snapshots the working tree, compiles on a GitHub macOS runner and downloads
 the IPA to `./dist/`; without the CLI, a macOS server falls back to a bare

@@ -398,8 +398,8 @@ sub task_upload {
 
 sub task_sleep {
     my ($args) = @_;
-    my $secs = $args->{seconds} || 10;
-    $secs = 1 if $secs < 1;
+    my $secs = $args->{seconds} // 10;
+    $secs = 1 if !$secs || $secs !~ /^\d+$/ || $secs < 1;
     $interval = $secs;
     return ("heartbeat interval set to ${interval}s", 0);
 }
