@@ -489,13 +489,15 @@
     ['', '  < + > task delivered :: shell "whoami"'],
     ['', '  < ok > result posted  :: exit 0, 42 bytes'],
     ['', '  < + > heartbeat ok    :: +10s ± jitter'],
-    ['', '  < ok > Wait for command '],
+    ['', '  < ! > idle'],
   ];
   var el = document.getElementById('typed');
   var li = 0, ci = 0;
-  var LINE_DELAYS = [1000, 2000, 3000];
   function lineDelay() {
-    return LINE_DELAYS[Math.floor(Math.random() * LINE_DELAYS.length)];
+    // taper: first log lines appear fast, later lines settle — total ~6s
+    var base = li <= 3 ? 350 : 800;
+    var span = li <= 3 ? 450 : 1200;
+    return base + Math.floor(Math.random() * span);
   }
   function lineHtml(l) {
     return l[0] ? l[0] + '<span class="ok">' + l[1] + '</span>' : l[1];
