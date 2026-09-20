@@ -493,6 +493,7 @@
   ];
   var el = document.getElementById('typed');
   var li = 0, ci = 0;
+  var TYPE_DELAY = 70;
   function lineDelay() {
     // taper: first log lines appear fast, later lines settle — total ~6s
     var base = li <= 3 ? 350 : 800;
@@ -514,7 +515,7 @@
       if (ci < tail.length) {
         el.innerHTML += '<span class="ok">' + tail.slice(0, ci + 1).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span><span class="caret"></span>';
         ci++;
-        setTimeout(type, 26);
+        setTimeout(type, TYPE_DELAY);
       } else {
         el.innerHTML += '<span class="ok">' + tail + '</span>';
         li = 1; ci = 0;
@@ -530,7 +531,7 @@
   if (reduced) {
     el.innerHTML = lines.map(lineHtml).join('\n');
   } else {
-    setTimeout(type, 26);
+    setTimeout(type, TYPE_DELAY);
     type();
   }
 })();
