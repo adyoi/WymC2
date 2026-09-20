@@ -483,13 +483,13 @@
 
   // ── terminal typing effect ──────────────────────────────────
   var lines = [
-    ['$ ', 'wym-c2', ' --connect'],
+    ['$ ', 'wym-c2 --connect'],
     ['', '  < ok > server reachable at http://127.0.0.1:8000'],
     ['', '  < + > agent registered :: id e83a9f2c4d1b7aa0'],
     ['', '  < + > task delivered :: shell "whoami"'],
     ['', '  < ok > result posted  :: exit 0, 42 bytes'],
     ['', '  < + > heartbeat ok    :: +10s ± jitter'],
-    ['$ ', 'Connected'],
+    ['', '  < ok > connected'],
   ];
   var el = document.getElementById('typed');
   var li = 0, ci = 0;
