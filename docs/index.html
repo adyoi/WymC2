@@ -489,11 +489,14 @@
     ['', '  < + > task delivered :: shell "whoami"'],
     ['', '  < ok > result posted  :: exit 0, 42 bytes'],
     ['', '  < + > heartbeat ok    :: +10s ± jitter'],
-    ['', '  < ok > Wait for command  _'],
+    ['', '  < ok > Wait for command '],
   ];
   var el = document.getElementById('typed');
   var li = 0, ci = 0;
-  var LINE_DELAY = 500;
+  var LINE_DELAYS = [1000, 2000, 3000];
+  function lineDelay() {
+    return LINE_DELAYS[Math.floor(Math.random() * LINE_DELAYS.length)];
+  }
   function lineHtml(l) {
     return l[0] ? l[0] + '<span class="ok">' + l[1] + '</span>' : l[1];
   }
@@ -513,14 +516,14 @@
       } else {
         el.innerHTML += '<span class="ok">' + tail + '</span>';
         li = 1; ci = 0;
-        setTimeout(type, LINE_DELAY);
+        setTimeout(type, lineDelay());
       }
       return;
     }
-    // log lines: reveal one whole line at a time, with a delay between
+    // log lines: reveal one whole line at a time, with a random delay between
     el.innerHTML = lines.slice(0, li + 1).map(lineHtml).join('\n') + '<span class="caret"></span>';
     li++;
-    if (li < lines.length) setTimeout(type, LINE_DELAY);
+    if (li < lines.length) setTimeout(type, lineDelay());
   }
   if (reduced) {
     el.innerHTML = lines.map(lineHtml).join('\n');
