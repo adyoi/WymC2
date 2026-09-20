@@ -489,31 +489,43 @@
     ['', '  < + > task delivered :: shell "whoami"'],
     ['', '  < ok > result posted  :: exit 0, 42 bytes'],
     ['', '  < + > heartbeat ok    :: +10s ± jitter'],
-    ['', '  < ok > connected'],
+    ['', '  < ok > Wait for command  _'],
   ];
   var el = document.getElementById('typed');
   var li = 0, ci = 0;
+  var LINE_DELAY = 500;
+  function lineHtml(l) {
+    return l[0] ? l[0] + '<span class="ok">' + l[1] + '</span>' : l[1];
+  }
   function type() {
     if (li >= lines.length) return;
     var ln = lines[li];
     var head = ln[0], tail = ln[1];
-    var headEl = head ? '<span style="color:var(--cyan)">' + head.replace(/ /g, '&nbsp;') + '</span>' : '';
-    el.innerHTML = lines.slice(0, li)
-      .map(function (l) { return l[0] ? l[0] + '<span class="ok">' + l[1] + '</span>' : l[1]; })
-      .join('\n');
-    if (ci === 0) el.innerHTML += (headEl ? '\n' + headEl : '');
-    if (ci < tail.length) {
-      el.innerHTML += '<span class="ok">' + tail.slice(0, ci + 1).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span><span class="caret"></span>';
-      ci++;
-    } else {
-      el.innerHTML += '<span class="ok">' + tail + '</span>';
-      ci = 0; li++;
+    if (li === 0) {
+      // command line: typed character by character
+      var headEl = head ? '<span style="color:var(--cyan)">' + head.replace(/ /g, '&nbsp;') + '</span>' : '';
+      el.innerHTML = lines.slice(0, li).map(lineHtml).join('\n');
+      if (ci === 0) el.innerHTML += (headEl ? '\n' + headEl : '');
+      if (ci < tail.length) {
+        el.innerHTML += '<span class="ok">' + tail.slice(0, ci + 1).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span><span class="caret"></span>';
+        ci++;
+        setTimeout(type, 26);
+      } else {
+        el.innerHTML += '<span class="ok">' + tail + '</span>';
+        li = 1; ci = 0;
+        setTimeout(type, LINE_DELAY);
+      }
+      return;
     }
+    // log lines: reveal one whole line at a time, with a delay between
+    el.innerHTML = lines.slice(0, li + 1).map(lineHtml).join('\n') + '<span class="caret"></span>';
+    li++;
+    if (li < lines.length) setTimeout(type, LINE_DELAY);
   }
   if (reduced) {
-    el.innerHTML = lines.map(function (l) { return l[0] ? l[0] + '<span class="ok">' + l[1] + '</span>' : l[1]; }).join('\n');
+    el.innerHTML = lines.map(lineHtml).join('\n');
   } else {
-    setInterval(type, 26);
+    setTimeout(type, 26);
     type();
   }
 })();
